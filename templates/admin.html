@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Admin — AIPostX{% endblock %}
+{% block page_title %}Admin Panel{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <div class="col-12">
+    <div class="alert alert-warning">
+      <i class="bi bi-shield-exclamation me-2"></i>
+      <strong>Admin Area.</strong> Be careful — actions here affect the entire platform.
+    </div>
+  </div>
+
+  <!-- System info -->
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-header d-flex align-items-center gap-2">
+        <i class="bi bi-server" style="color:var(--accent-cyan)"></i> System Status
+      </div>
+      <div class="card-body">
+        <div class="d-flex justify-content-between py-2" style="border-bottom:1px solid var(--border)">
+          <span class="small" style="color:var(--text-secondary)">Platform</span>
+          <span class="badge bg-success">Running</span>
+        </div>
+        <div class="d-flex justify-content-between py-2" style="border-bottom:1px solid var(--border)">
+          <span class="small" style="color:var(--text-secondary)">Database</span>
+          <span class="badge bg-success">SQLite OK</span>
+        </div>
+        <div class="d-flex justify-content-between py-2" style="border-bottom:1px solid var(--border)">
+          <span class="small" style="color:var(--text-secondary)">WebSocket</span>
+          <span class="badge bg-success">Connected</span>
+        </div>
+        <div class="d-flex justify-content-between py-2">
+          <span class="small" style="color:var(--text-secondary)">Encryption</span>
+          <span class="badge bg-success">Active</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Danger Zone -->
+  <div class="col-lg-6">
+    <div class="card" style="border-color:rgba(244,63,94,.3)">
+      <div class="card-header d-flex align-items-center gap-2" style="border-color:rgba(244,63,94,.3)">
+        <i class="bi bi-exclamation-triangle-fill" style="color:var(--accent-rose)"></i> Danger Zone
+      </div>
+      <div class="card-body">
+        <div class="mb-3">
+          <div class="fw-semibold small mb-1">Reset Facebook Session</div>
+          <div style="font-size:.8rem;color:var(--text-muted);margin-bottom:8px">Clears Chrome profile and cookies. You'll need to log in again.</div>
+          <button class="btn btn-outline-danger btn-sm" onclick="resetSession()">
+            <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Session
+          </button>
+        </div>
+        <div class="glow-line" style="background:linear-gradient(90deg,transparent,var(--accent-rose),transparent)"></div>
+        <div>
+          <div class="fw-semibold small mb-1">Delete Saved Credentials</div>
+          <div style="font-size:.8rem;color:var(--text-muted);margin-bottom:8px">Removes encrypted email/password from disk.</div>
+          <button class="btn btn-outline-danger btn-sm" onclick="deleteCreds()">
+            <i class="bi bi-trash3 me-1"></i>Delete Credentials
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Credentials Status -->
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex align-items-center gap-2">
+        <i class="bi bi-key-fill" style="color:var(--accent-amber)"></i> Saved Credentials
+      </div>
+      <div class="card-body" id="creds-info">
+        <div class="small" style="color:var(--text-muted)">Loading...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-area" class="position-fixed bottom-0 end-0 p-3" style="z-index:9999"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+fetch('/api/credentials').then(r=>r.json()).then(d=>{
+  var el=document.getElementById('creds-info');
+  if(d.has_saved_credentials){
+    el.innerHTML='<div class="d-flex align-items-center gap-3"><div style="width:40px;height:40px;background:rgba(16,185,129,.1);border-radius:10px;display:flex;align-items:center;justify-content:center"><i class="bi bi-check-circle-fill" style="color:var(--accent-green);font-size:1.2rem"></i></div><div><div class="fw-semibold small">Credentials saved</div><div style="font-size:.8rem;color:var(--text-muted)">Email: '+d.username+' &nbsp;|&nbsp; Saved: '+d.saved_at+'</div></div></div>';
+  } else {
+    el.innerHTML='<div class="small" style="color:var(--text-muted)"><i class="bi bi-x-circle me-2"></i>No credentials saved.</div>';
+  }
+});
+
+function resetSession(){
+  if(!confirm('Reset Facebook session? Chrome profile and cookies will be deleted.'))return;
+  fetch('/api/reset_session',{method:'POST'}).then(r=>r.json()).then(d=>{
+    toast(d.message||d.error, d.error?'danger':'success');
+  });
+}
+
+function deleteCreds(){
+  if(!confirm('Delete saved credentials?'))return;
+  fetch('/api/credentials',{method:'DELETE'}).then(r=>r.json()).then(d=>{
+    toast(d.message||d.error, d.error?'danger':'success');
+    setTimeout(()=>location.reload(),1500);
+  });
+}
+
+function toast(msg,type){
+  var t=document.createElement('div');
+  t.className='alert alert-'+type+' shadow mb-2';
+  t.style.maxWidth='400px';
+  t.innerHTML=msg;
+  document.getElementById('toast-area').appendChild(t);
+  setTimeout(()=>t.remove(),4000);
+}
+</script>
+{% endblock %}

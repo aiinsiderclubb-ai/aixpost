@@ -1,0 +1,511 @@
+{% extends "base.html" %}
+{% block title %}Templates — AIPostX{% endblock %}
+{% block page_title %}Message Templates{% endblock %}
+{% block page_actions %}
+<button class="btn btn-primary btn-sm" id="btn-new-tpl" onclick="openEditor(null)">
+  <i class="bi bi-plus-lg me-1"></i>New Template
+</button>
+{% endblock %}
+
+{% block head %}
+<style>
+/* ─── Templates layout ─── */
+.tpl-grid{display:grid;grid-template-columns:1fr 380px;gap:24px;align-items:start}
+@media(max-width:1100px){.tpl-grid{grid-template-columns:1fr}}
+
+/* ─── Template card ─── */
+.tpl-card{
+  display:flex;align-items:flex-start;gap:14px;padding:16px 18px;
+  border-bottom:1px solid var(--color-border,#e5e7eb);
+  transition:background .15s;cursor:pointer;
+}
+.tpl-card:last-child{border-bottom:none}
+.tpl-card:hover{background:var(--hover-color,rgba(0,0,0,.03))}
+.tpl-card.active{background:var(--color-primary-light,rgba(99,102,241,.07));border-left:3px solid var(--color-primary,#6366f1);padding-left:15px}
+.tpl-card-num{
+  width:32px;height:32px;border-radius:8px;flex-shrink:0;font-size:.8rem;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--color-primary-light,rgba(99,102,241,.1));color:var(--color-primary,#6366f1);
+}
+.tpl-card-body{flex:1;min-width:0}
+.tpl-card-preview{
+  font-size:.82rem;color:var(--color-text-secondary,#374151);
+  white-space:pre-wrap;word-break:break-word;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
+  max-height:62px;line-height:1.5;
+}
+.tpl-card-meta{font-size:.72rem;color:var(--color-text-tertiary,#6b7280);margin-top:4px}
+.tpl-card-actions{display:flex;gap:6px;flex-shrink:0}
+
+/* ─── Editor panel ─── */
+.editor-panel{position:sticky;top:88px}
+.tpl-editor{
+  width:100%;min-height:260px;resize:vertical;
+  background:var(--card-inner-bg,rgba(248,250,252,.8));
+  border:1.5px solid var(--color-border,#e5e7eb);
+  border-radius:var(--radius-md,10px);padding:14px;
+  font-size:.875rem;line-height:1.65;color:var(--color-text,#111827);
+  font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
+  transition:border-color .2s,box-shadow .2s;
+}
+.tpl-editor:focus{
+  outline:none;border-color:var(--color-primary,#6366f1);
+  box-shadow:0 0 0 4px var(--color-primary-light,rgba(99,102,241,.1));
+}
+
+/* ─── Var chips ─── */
+.var-chip{
+  display:inline-flex;align-items:center;padding:3px 10px;border-radius:6px;
+  font-size:.75rem;font-weight:600;font-family:monospace;
+  background:rgba(99,102,241,.1);color:var(--color-primary,#6366f1);
+  border:1px solid rgba(99,102,241,.25);cursor:pointer;transition:all .15s;
+}
+.var-chip:hover{background:var(--color-primary,#6366f1);color:#fff}
+
+/* ─── Preview box ─── */
+.preview-box{
+  padding:14px;border-radius:var(--radius-md,10px);
+  border:1.5px solid var(--color-border,#e5e7eb);
+  background:var(--card-inner-bg,rgba(248,250,252,.8));
+  font-size:.82rem;line-height:1.65;white-space:pre-wrap;word-break:break-word;
+  color:var(--color-text,#111827);min-height:80px;
+}
+
+/* ─── Empty state ─── */
+.empty-state{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:60px 20px;color:var(--color-text-tertiary,#6b7280);
+}
+.empty-icon{
+  width:64px;height:64px;border-radius:16px;margin-bottom:16px;
+  background:var(--color-primary-light,rgba(99,102,241,.1));
+  display:flex;align-items:center;justify-content:center;font-size:1.8rem;
+  color:var(--color-primary,#6366f1);
+}
+
+/* ─── Char count ─── */
+.char-bar{height:4px;border-radius:99px;background:var(--color-border,#e5e7eb);margin-top:6px}
+.char-bar-fill{height:100%;border-radius:99px;background:var(--color-primary,#6366f1);transition:width .3s,background .3s}
+.mode-link-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mode-link{
+  display:flex;flex-direction:column;gap:4px;padding:12px 14px;border-radius:10px;
+  border:1.5px solid var(--color-border,#e5e7eb);text-decoration:none;
+  color:var(--color-text,#111827);background:var(--card-inner-bg,rgba(248,250,252,.8));
+  transition:all .18s;
+}
+.mode-link:hover{border-color:var(--color-primary,#6366f1);background:var(--color-primary-light,rgba(99,102,241,.08));color:var(--color-primary,#6366f1)}
+.mode-link small{color:var(--color-text-tertiary,#6b7280);line-height:1.45}
+
+/* ─── Dark overrides ─── */
+.dark-theme .tpl-editor{background:rgba(30,41,59,.7);border-color:#374151;color:#f9fafb}
+.dark-theme .preview-box{background:rgba(30,41,59,.7);border-color:#374151;color:#f9fafb}
+.dark-theme .tpl-card:hover{background:rgba(255,255,255,.04)}
+.dark-theme .tpl-card.active{background:rgba(99,102,241,.1)}
+.dark-theme .mode-link{background:rgba(30,41,59,.7);border-color:#374151;color:#f9fafb}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="tpl-grid">
+
+  <!-- ═══ LEFT: TEMPLATE LIST ═══ -->
+  <div>
+    <div class="card" style="overflow:hidden;padding:0">
+      <div style="display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--color-border,#e5e7eb)">
+        <i class="bi bi-collection-fill" style="color:var(--color-primary,#6366f1)"></i>
+        <h6 class="mb-0" style="font-weight:700">Saved Templates</h6>
+        <span id="tpl-count" style="font-size:.8rem;font-weight:600;padding:3px 10px;border-radius:99px;background:var(--color-primary-light,rgba(99,102,241,.1));color:var(--color-primary,#6366f1);margin-left:4px">0</span>
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="selectAllCb()">All</button>
+          <button class="btn btn-secondary btn-sm" onclick="deselectAll()">None</button>
+          <button class="btn btn-danger btn-sm" id="btn-delete-sel" onclick="deleteSelected()" style="display:none">
+            <i class="bi bi-trash3 me-1"></i>Delete selected
+          </button>
+        </div>
+      </div>
+      <div id="tpl-list">
+        <div class="empty-state" id="tpl-empty">
+          <div class="empty-icon"><i class="bi bi-file-earmark-text"></i></div>
+          <div style="font-weight:600;margin-bottom:6px">No templates yet</div>
+          <div style="font-size:.82rem;text-align:center;max-width:240px">Create your first template to quickly reuse messages when posting to groups.</div>
+          <button class="btn btn-primary btn-sm" style="margin-top:16px" onclick="openEditor(null)"><i class="bi bi-plus-lg me-1"></i>New Template</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ RIGHT: EDITOR + PREVIEW ═══ -->
+  <div class="editor-panel">
+
+    <!-- Editor -->
+    <div class="card mb-4" style="overflow:hidden;padding:0">
+      <div style="display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--color-border,#e5e7eb)">
+        <i class="bi bi-pencil-square" style="color:var(--color-warning,#f59e0b)"></i>
+        <h6 class="mb-0" style="font-weight:700" id="editor-title">New Template</h6>
+        <span id="editor-idx" style="display:none"></span>
+      </div>
+      <div style="padding:18px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+          <div>
+            <label class="form-label small mb-1">Title</label>
+            <input class="form-control" id="tpl-title" placeholder="Offer intro">
+          </div>
+          <div>
+            <label class="form-label small mb-1">Folder</label>
+            <input class="form-control" id="tpl-folder" placeholder="Default">
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small mb-1">Tags</label>
+          <input class="form-control" id="tpl-tags" placeholder="promo, german, ab-test-a">
+        </div>
+        <!-- Variable quick-insert -->
+        <div id="vars-row" style="margin-bottom:12px;display:flex;flex-wrap:wrap;gap:6px;min-height:26px">
+          <span style="font-size:.75rem;color:var(--color-text-tertiary,#6b7280);align-self:center;flex-shrink:0;margin-right:2px">Insert:</span>
+        </div>
+
+        <textarea class="tpl-editor" id="tpl-editor" placeholder="Hello {name}!&#10;&#10;Write your message here.&#10;Use {variable} placeholders for dynamic content.&#10;&#10;Emoji ✅, links, and line breaks are all supported."
+          oninput="onEditorInput()"></textarea>
+        <div class="char-bar"><div class="char-bar-fill" id="editor-char-fill" style="width:0%"></div></div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px">
+          <span id="editor-char-label" style="font-size:.75rem;color:var(--color-text-tertiary,#6b7280)">0 characters</span>
+          <span id="editor-var-count" style="font-size:.75rem;color:var(--color-primary,#6366f1)"></span>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:16px">
+          <button class="btn btn-primary" style="flex:1;font-weight:700" onclick="saveTemplate()">
+            <i class="bi bi-floppy-fill me-2"></i>Save Template
+          </button>
+          <button class="btn btn-secondary" onclick="clearEditor()" title="Clear editor">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live preview -->
+    <div class="card mb-4" style="overflow:hidden;padding:0">
+      <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--color-border,#e5e7eb)">
+        <i class="bi bi-eye-fill" style="color:var(--color-cyan,#06b6d4)"></i>
+        <h6 class="mb-0" style="font-weight:700">Live Preview</h6>
+        <button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="refreshPreview()">
+          <i class="bi bi-arrow-repeat me-1"></i>Generate
+        </button>
+      </div>
+      <div style="padding:16px">
+        <div class="preview-box" id="live-preview">Your message preview will appear here as you type...</div>
+      </div>
+    </div>
+
+    <div class="card mb-4" style="overflow:hidden;padding:0">
+      <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--color-border,#e5e7eb)">
+        <i class="bi bi-send-check-fill" style="color:var(--color-primary,#6366f1)"></i>
+        <h6 class="mb-0" style="font-weight:700">Use Templates In Posting</h6>
+      </div>
+      <div style="padding:16px">
+        <div style="font-size:.82rem;color:var(--color-text-tertiary,#6b7280);margin-bottom:12px">
+          Open the posting page with your saved templates enabled. Different modes define how all templates rotate across groups.
+        </div>
+        <div class="mode-link-grid">
+          <a class="mode-link" href="{{ url_for('poster_page') }}?use_templates=1&template_mode=random">
+            <strong>Random</strong>
+            <small>Random template for each group.</small>
+          </a>
+          <a class="mode-link" href="{{ url_for('poster_page') }}?use_templates=1&template_mode=sequential">
+            <strong>Sequential</strong>
+            <small>Template 1, 2, 3, then repeat.</small>
+          </a>
+          <a class="mode-link" href="{{ url_for('poster_page') }}?use_templates=1&template_mode=shuffle_cycle">
+            <strong>Shuffled Cycle</strong>
+            <small>Use all templates in random order before repeating.</small>
+          </a>
+          <a class="mode-link" href="{{ url_for('poster_page') }}?use_templates=1&template_mode=reverse">
+            <strong>Reverse</strong>
+            <small>Start from the last template and move backward.</small>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Available variables -->
+    <div class="card" style="overflow:hidden;padding:0">
+      <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--color-border,#e5e7eb)">
+        <i class="bi bi-braces" style="color:var(--color-success,#10b981)"></i>
+        <h6 class="mb-0" style="font-weight:700">Available Variables</h6>
+      </div>
+      <div style="padding:16px" id="tpl-vars">
+        <p style="font-size:.82rem;color:var(--color-text-tertiary,#6b7280)">Loading variables...</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var allTemplates = [];
+var templateRecords = [];
+var activeIdx = null;
+
+/* ─── Load templates list ─── */
+function loadTemplates(){
+  fetch('/api/templates/list').then(r=>r.json()).then(d=>{
+    allTemplates = d.templates || [];
+    templateRecords = d.records || [];
+    renderList();
+    document.getElementById('tpl-count').textContent = allTemplates.length;
+  });
+}
+
+function renderList(){
+  var el = document.getElementById('tpl-list');
+  var empty = document.getElementById('tpl-empty');
+
+  if(!allTemplates.length){
+    el.innerHTML = '';
+    el.appendChild(empty || buildEmpty());
+    if(empty) empty.style.display='';
+    return;
+  }
+  if(empty) empty.style.display = 'none';
+
+  el.innerHTML = allTemplates.map((t, i) => {
+    var meta = templateRecords.find(r=>r.content === t) || {};
+    var vars = extractVars(t);
+    var varHtml = vars.length ? vars.slice(0,4).map(v=>'<span class="var-chip" style="cursor:default;font-size:.67rem">{'+v+'}</span>').join(' ') : '';
+    var tagHtml = (meta.tags || []).slice(0,3).map(v=>'<span class="var-chip" style="cursor:default;font-size:.67rem">'+escHtml(v)+'</span>').join(' ');
+    return '<div class="tpl-card" id="tplcard-'+i+'" onclick="selectTpl('+i+')" data-idx="'+i+'">'
+      + '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0">'
+      + '<input type="checkbox" class="tpl-cb" value="'+i+'" onclick="event.stopPropagation()" onchange="onCbChange()" style="width:16px;height:16px;accent-color:var(--color-primary,#6366f1)">'
+      + '<div class="tpl-card-num">'+(i+1)+'</div>'
+      + '</div>'
+      + '<div class="tpl-card-body">'
+      + (meta.title ? '<div class="fw-semibold small mb-1">'+escHtml(meta.title)+'</div>' : '')
+      + '<div class="tpl-card-preview">'+escHtml(t)+'</div>'
+      + (varHtml ? '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">'+varHtml+'</div>' : '')
+      + (tagHtml ? '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">'+tagHtml+'</div>' : '')
+      + '<div class="tpl-card-meta">'+(meta.folder || 'Default')+' · '+t.length+' characters · '+(vars.length ? vars.length+' variable'+(vars.length>1?'s':'') : 'no variables')+'</div>'
+      + '</div>'
+      + '<div class="tpl-card-actions">'
+      + '<button class="btn btn-secondary btn-sm" title="Edit" onclick="event.stopPropagation();selectTpl('+i+')"><i class="bi bi-pencil"></i></button>'
+      + '<button class="btn btn-danger btn-sm" title="Delete" onclick="event.stopPropagation();deleteSingle('+i+')"><i class="bi bi-trash3"></i></button>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+/* ─── Select / edit ─── */
+function selectTpl(i){
+  activeIdx = i;
+  var t = allTemplates[i];
+  var meta = templateRecords.find(r=>r.content === t) || {};
+  document.getElementById('tpl-editor').value = t;
+  document.getElementById('tpl-title').value = meta.title || '';
+  document.getElementById('tpl-folder').value = meta.folder || 'Default';
+  document.getElementById('tpl-tags').value = (meta.tags || []).join(', ');
+  document.getElementById('editor-title').textContent = 'Edit Template #' + (i+1);
+  document.getElementById('editor-idx').textContent = i;
+  onEditorInput();
+  document.querySelectorAll('.tpl-card').forEach((c,ci)=>c.classList.toggle('active', ci===i));
+}
+
+function openEditor(idx){
+  activeIdx = null;
+  document.getElementById('tpl-editor').value = '';
+  document.getElementById('tpl-title').value = '';
+  document.getElementById('tpl-folder').value = 'Default';
+  document.getElementById('tpl-tags').value = '';
+  document.getElementById('editor-title').textContent = 'New Template';
+  document.getElementById('editor-idx').textContent = '';
+  onEditorInput();
+  document.querySelectorAll('.tpl-card').forEach(c=>c.classList.remove('active'));
+  document.getElementById('tpl-editor').focus();
+}
+function clearEditor(){ openEditor(null); }
+
+/* ─── Save ─── */
+function saveTemplate(){
+  var content = document.getElementById('tpl-editor').value.trim();
+  var title = document.getElementById('tpl-title').value.trim();
+  var folder = document.getElementById('tpl-folder').value.trim() || 'Default';
+  var tags = document.getElementById('tpl-tags').value.split(',').map(v=>v.trim()).filter(Boolean);
+  if(!content){ showToast('Template cannot be empty','warning'); return; }
+
+  var idxEl = document.getElementById('editor-idx');
+  var idx = idxEl.textContent !== '' ? parseInt(idxEl.textContent) : null;
+
+  if(idx !== null){
+    /* Update existing: delete then re-add at same position */
+    fetch('/api/templates/delete',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({template_index:idx})
+    }).then(r=>r.json()).then(()=>{
+      fetch('/api/templates/add',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({template:content})
+      }).then(r=>r.json()).then(d=>{
+        if(d.success){
+          saveTemplateMeta(content, title, folder, tags, function(){
+            showToast('✅ Template updated!','success'); loadTemplates(); clearEditor();
+          });
+        }
+        else showToast('❌ '+d.error,'danger');
+      });
+    });
+  } else {
+    fetch('/api/templates/add',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({template:content})
+    }).then(r=>r.json()).then(d=>{
+      if(d.success){
+        saveTemplateMeta(content, title, folder, tags, function(){
+          showToast('✅ Template saved!','success'); loadTemplates(); clearEditor();
+        });
+      }
+      else showToast('❌ '+(d.error||'Failed'),'danger');
+    });
+  }
+}
+
+function saveTemplateMeta(content, title, folder, tags, onDone){
+  fetch('/api/templates/metadata',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({content:content,title:title,folder:folder,tags:tags})
+  }).then(()=>{ if(onDone) onDone(); }).catch(()=>{ if(onDone) onDone(); });
+}
+
+/* ─── Delete ─── */
+function deleteSingle(i){
+  if(!confirm('Delete template #'+(i+1)+'?')) return;
+  fetch('/api/templates/delete',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({template_index:i})
+  }).then(r=>r.json()).then(d=>{
+    if(d.success){ showToast('Template deleted','info'); loadTemplates(); if(activeIdx===i)clearEditor(); }
+    else showToast('❌ '+d.error,'danger');
+  });
+}
+
+function deleteSelected(){
+  var ids = Array.from(document.querySelectorAll('.tpl-cb:checked')).map(c=>parseInt(c.value));
+  if(!ids.length){ showToast('Select templates first','warning'); return; }
+  if(!confirm('Delete '+ids.length+' template(s)?')) return;
+  fetch('/api/templates/delete_multiple',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({template_indices:ids})
+  }).then(r=>r.json()).then(d=>{
+    if(d.success){ showToast('Deleted '+ids.length+' template(s)','info'); loadTemplates(); clearEditor(); }
+    else showToast('❌ '+d.error,'danger');
+  });
+}
+
+function selectAllCb(){
+  document.querySelectorAll('.tpl-cb').forEach(c=>c.checked=true);
+  onCbChange();
+}
+function deselectAll(){
+  document.querySelectorAll('.tpl-cb').forEach(c=>c.checked=false);
+  onCbChange();
+}
+function onCbChange(){
+  var n = document.querySelectorAll('.tpl-cb:checked').length;
+  document.getElementById('btn-delete-sel').style.display = n > 0 ? '' : 'none';
+}
+
+/* ─── Editor helpers ─── */
+function onEditorInput(){
+  var val = document.getElementById('tpl-editor').value;
+  var len = val.length;
+  var pct = Math.min(len/8000*100,100);
+  document.getElementById('editor-char-label').textContent = len + ' characters';
+  var fill = document.getElementById('editor-char-fill');
+  fill.style.width = pct + '%';
+  fill.style.background = pct > 90 ? '#ef4444' : pct > 70 ? '#f59e0b' : '#6366f1';
+  var vars = extractVars(val);
+  document.getElementById('editor-var-count').textContent = vars.length ? vars.length+' variable'+(vars.length>1?'s':'') : '';
+  updateVarsRow(vars);
+  /* live preview: simple substitution */
+  var preview = val.replace(/\{([^}]+)\}/g, (m,k)=>'['+k+']');
+  document.getElementById('live-preview').textContent = preview || 'Your message preview will appear here...';
+}
+
+function updateVarsRow(vars){
+  var row = document.getElementById('vars-row');
+  /* keep the first "Insert:" label, remove chips */
+  var chips = row.querySelectorAll('.var-chip-btn');
+  chips.forEach(c=>c.remove());
+  if(!vars.length) return;
+  vars.forEach(v=>{
+    var chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'var-chip var-chip-btn';
+    chip.textContent = '{'+v+'}';
+    chip.title = 'Insert into message';
+    chip.onclick = function(){ insertAtCursor(document.getElementById('tpl-editor'), '{'+v+'}'); onEditorInput(); };
+    row.appendChild(chip);
+  });
+}
+
+function insertAtCursor(el, text){
+  var s = el.selectionStart, e = el.selectionEnd;
+  var val = el.value;
+  el.value = val.slice(0,s) + text + val.slice(e);
+  el.selectionStart = el.selectionEnd = s + text.length;
+  el.focus();
+}
+
+function extractVars(text){
+  var found = [], seen = new Set();
+  var m;
+  var re = /\{([^}]{1,40})\}/g;
+  while((m=re.exec(text))!==null){
+    if(!seen.has(m[1])){ seen.add(m[1]); found.push(m[1]); }
+  }
+  return found;
+}
+
+/* ─── Live preview from API ─── */
+function refreshPreview(){
+  var txt = document.getElementById('tpl-editor').value.trim();
+  if(!txt){ showToast('Write a template first','warning'); return; }
+  fetch('/api/templates/preview?count=1',{method:'GET'}).then(r=>r.json()).then(d=>{
+    if(d.previews && d.previews.length){
+      document.getElementById('live-preview').textContent = d.previews[0].generated_message || d.previews[0].original_template || txt;
+    }
+  }).catch(()=>{});
+}
+
+/* ─── Available variables panel ─── */
+fetch('/api/templates/variables').then(r=>r.json()).then(d=>{
+  var el = document.getElementById('tpl-vars');
+  if(typeof d === 'object' && d !== null){
+    var keys = Object.keys(d);
+    if(!keys.length){ el.innerHTML='<p style="font-size:.82rem;color:var(--color-text-tertiary,#6b7280)">No variables configured.</p>'; return; }
+    el.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px">'
+      + keys.map(k=>'<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-radius:8px;border:1px solid var(--color-border,#e5e7eb)">'
+        + '<button type="button" class="var-chip var-chip-btn" onclick="insertAtCursor(document.getElementById(\'tpl-editor\'),\'{'+k+'}\');onEditorInput()" title="Click to insert">{'+k+'}</button>'
+        + '<span style="font-size:.78rem;color:var(--color-text-tertiary,#6b7280)">'+(d[k]||'')+'</span>'
+        + '</div>'
+      ).join('')
+      + '</div>';
+    /* also populate vars row if editor has something */
+    if(document.getElementById('tpl-editor').value) onEditorInput();
+  } else el.innerHTML='<p style="font-size:.82rem;color:var(--color-text-tertiary,#6b7280)">No variables available.</p>';
+}).catch(()=>{
+  document.getElementById('tpl-vars').innerHTML='<p style="font-size:.82rem;color:var(--color-text-tertiary,#6b7280)">Could not load variables.</p>';
+});
+
+/* ─── Escape HTML ─── */
+function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+/* ─── Toast ─── */
+function showToast(msg, type){
+  var colors = {success:'#10b981',warning:'#f59e0b',danger:'#ef4444',info:'#6366f1'};
+  var t = document.createElement('div');
+  t.style.cssText='position:fixed;bottom:24px;right:24px;z-index:9999;max-width:380px;padding:14px 18px;border-radius:12px;background:#fff;box-shadow:0 10px 40px rgba(0,0,0,.15);font-size:.875rem;font-weight:500;display:flex;align-items:center;gap:10px;border-left:4px solid '+(colors[type]||colors.info);
+  t.innerHTML='<span>'+msg+'</span>';
+  document.body.appendChild(t);
+  requestAnimationFrame(()=>t.style.transition='opacity .4s');
+  setTimeout(()=>{ t.style.opacity='0'; setTimeout(()=>t.remove(),400); }, 3800);
+}
+
+loadTemplates();
+</script>
+{% endblock %}

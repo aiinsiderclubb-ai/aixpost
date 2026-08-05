@@ -1,0 +1,291 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — AIPostX{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block page_actions %}
+<button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#fetchModal">
+  <i class="bi bi-arrow-repeat me-1"></i> Fetch Groups
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <h2>Operations Overview</h2>
+  <div class="status-badge-wrapper">
+    <div class="status-badge status-idle" id="status-pill">
+      <span class="status-dot"></span>
+      <span id="status-badge">Idle</span>
+    </div>
+  </div>
+</div>
+
+<div class="dashboard-container mb-4">
+  <div class="card control-panel">
+    <div class="card-header">
+      <h5 class="mb-0">Performance Snapshot</h5>
+    </div>
+    <div class="card-body">
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-icon success"><i class="bi bi-people-fill"></i></div>
+          <div class="stat-info">
+            <div class="stat-label">Total Groups</div>
+            <div class="stat-value">{{ stats.total_groups }}</div>
+          </div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-icon success"><i class="bi bi-send-check-fill"></i></div>
+          <div class="stat-info">
+            <div class="stat-label">Posts Sent</div>
+            <div class="stat-value">{{ stats.posts_total|default(0) }}</div>
+          </div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-icon danger"><i class="bi bi-rocket-takeoff-fill"></i></div>
+          <div class="stat-info">
+            <div class="stat-label">Campaigns</div>
+            <div class="stat-value">{{ stats.total_campaigns|default(0) }}</div>
+          </div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-icon success"><i class="bi bi-graph-up-arrow"></i></div>
+          <div class="stat-info">
+            <div class="stat-label">Success Rate</div>
+            <div class="stat-value">{{ stats.success_rate|default('—') }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="progress-container">
+        <div class="progress-info">
+          <div class="progress-label" id="status-step">Waiting for next fetch</div>
+          <div class="progress-percentage" id="progress-percent">0%</div>
+        </div>
+        <div class="progress-bar-wrapper">
+          <div class="progress-bar" id="progress-bar" style="width:0%"></div>
+        </div>
+        <div class="d-flex justify-content-between mt-3 small text-muted">
+          <span id="groups-found">Groups found: 0</span>
+          <span id="elapsed-time">0s</span>
+        </div>
+        <div id="error-msg" class="alert alert-danger mt-3 py-2 d-none small app-alert"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card actions-card">
+    <div class="card-header">
+      <h5 class="mb-0">Quick Actions</h5>
+    </div>
+    <div class="card-body">
+      <div class="actions-grid">
+        <button class="action-button" onclick="window.location.href='{{ url_for('group_search_page') }}'" type="button">
+          <i class="bi bi-search"></i>
+          <span>Fetch Groups</span>
+        </button>
+        <a href="{{ url_for('poster_page') }}" class="action-button">
+          <i class="bi bi-send-fill"></i>
+          <span>Post to Groups</span>
+        </a>
+        <a href="{{ url_for('groups_page') }}" class="action-button">
+          <i class="bi bi-people-fill"></i>
+          <span>View Groups</span>
+        </a>
+        <a href="{{ url_for('analytics') }}" class="action-button">
+          <i class="bi bi-bar-chart-line-fill"></i>
+          <span>Analytics</span>
+        </a>
+      </div>
+
+      <div class="stat-summary">
+        <div class="badge bg-info text-dark">Messages {{ stats.messages_sent|default(0) }}</div>
+        <div class="badge bg-primary">Groups Posted {{ stats.groups_posted_unique|default(0) }}</div>
+        <div class="badge bg-success">Telegram {{ 'Connected' if stats.telegram_connected else 'Off' }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Telegram Status -->
+{% if stats.telegram_connected %}
+<div class="alert alert-success mb-4 d-flex align-items-center gap-2">
+  <i class="bi bi-bell-fill"></i>
+  <span>Telegram notifications are <strong>active</strong></span>
+</div>
+{% endif %}
+
+<!-- Export -->
+{% if stats.total_groups > 0 %}
+<div class="card mb-4">
+  <div class="card-header d-flex align-items-center justify-content-between gap-2">
+    <h5 class="mb-0">Export Groups</h5>
+    <span class="text-muted small">Download your latest dataset</span>
+  </div>
+  <div class="card-body d-flex flex-wrap gap-2">
+    <a href="{{ url_for('export_groups', format='json') }}" class="btn btn-secondary btn-sm">
+      <i class="bi bi-filetype-json me-1"></i>JSON
+    </a>
+    <a href="{{ url_for('export_groups', format='csv') }}" class="btn btn-secondary btn-sm">
+      <i class="bi bi-filetype-csv me-1"></i>CSV
+    </a>
+    <a href="{{ url_for('export_groups', format='excel') }}" class="btn btn-secondary btn-sm">
+      <i class="bi bi-file-earmark-excel me-1"></i>Excel
+    </a>
+    <a href="{{ url_for('export_groups', format='all') }}" class="btn btn-primary btn-sm">
+      <i class="bi bi-file-zip me-1"></i>All Formats (ZIP)
+    </a>
+  </div>
+</div>
+{% endif %}
+
+<!-- Fetch Modal -->
+<div class="modal fade" id="fetchModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-search me-2" style="color:var(--accent)"></i>Fetch Facebook Groups</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="saved-creds-banner" class="alert alert-success py-2 small d-none">
+          <i class="bi bi-check-circle me-1"></i><strong>Saved credentials found.</strong>
+          <a href="#" onclick="loadSavedCreds();return false" class="alert-link ms-1">Auto-fill</a>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Facebook Email</label>
+          <input type="email" class="form-control" id="fetch-email" placeholder="your@email.com">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Password</label>
+          <input type="password" class="form-control" id="fetch-password">
+        </div>
+        <div class="d-flex gap-3 mb-2">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="headless-mode">
+            <label class="form-check-label small" for="headless-mode">Headless mode</label>
+          </div>
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="save-creds">
+            <label class="form-check-label small" for="save-creds">Save credentials</label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="startFetch()">
+          <i class="bi bi-play-fill me-1"></i>Start Fetching
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block head %}
+{{ super() }}
+<style>
+#fetchModal {
+  z-index: 2000 !important;
+}
+
+#fetchModal.show {
+  display: block !important;
+}
+
+#fetchModal .modal-dialog {
+  position: relative;
+  z-index: 2001;
+  pointer-events: auto;
+  margin: 3.5rem auto;
+}
+
+#fetchModal .modal-content,
+#fetchModal .modal-header,
+#fetchModal .modal-body,
+#fetchModal .modal-footer,
+#fetchModal .form-control,
+#fetchModal .form-check-input,
+#fetchModal .form-check-label,
+#fetchModal button,
+#fetchModal label,
+#fetchModal input {
+  position: relative;
+  pointer-events: auto !important;
+}
+
+.modal-backdrop {
+  z-index: 1990 !important;
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var socket = window.io ? io() : null;
+
+function renderProgress(d){
+  const statusLabel = document.getElementById('status-badge');
+  const statusPill = document.getElementById('status-pill');
+  const statusMap = {running:'status-running',completed:'status-running',failed:'status-error',idle:'status-idle',waiting_manual:'status-running'};
+  statusLabel.textContent = d.status === 'waiting_manual' ? 'CAPTCHA' : d.status;
+  statusPill.className = 'status-badge ' + (statusMap[d.status] || 'status-idle');
+  const stepText = d.message || d.step || 'Waiting for next fetch';
+  document.getElementById('status-step').textContent = stepText;
+  document.getElementById('progress-bar').style.width = (d.progress||0)+'%';
+  document.getElementById('progress-percent').textContent = (d.progress||0)+'%';
+  document.getElementById('groups-found').textContent = 'Groups found: '+(d.total_groups||0);
+  document.getElementById('elapsed-time').textContent = (d.elapsed_time||0)+'s';
+  var e=document.getElementById('error-msg');
+  if(d.error){ e.textContent=d.error; e.classList.remove('d-none'); }
+  else if(d.status === 'waiting_manual'){ e.textContent = d.message || 'Пройдите проверку в окне Chrome — браузер не закроется.'; e.className='alert alert-warning mt-3 py-2 small app-alert'; e.classList.remove('d-none'); }
+  else { e.classList.add('d-none'); e.className='alert alert-danger mt-3 py-2 small app-alert'; }
+}
+
+function pollProgress(){
+  fetch('/api/progress')
+    .then(r=>r.json())
+    .then(d=>{
+      renderProgress(d);
+      if (d.status === 'running' || d.status === 'waiting_manual') setTimeout(pollProgress, 2000);
+    })
+    .catch(()=>{});
+}
+
+if (socket) {
+  socket.on('connect', function(){ socket.emit('request_progress'); });
+  socket.on('progress_update', renderProgress);
+  socket.on('fetch_progress', renderProgress);
+} else {
+  pollProgress();
+}
+
+function startFetch(){
+  var email=document.getElementById('fetch-email').value;
+  var pwd=document.getElementById('fetch-password').value;
+  if(!email||!pwd){alert('Please enter email and password');return;}
+  fetch('/api/start_fetch',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({username:email,password:pwd,
+      headless:document.getElementById('headless-mode').checked,
+      save_credentials:document.getElementById('save-creds').checked})
+  }).then(r=>r.json()).then(d=>{
+    bootstrap.Modal.getInstance(document.getElementById('fetchModal')).hide();
+    if(d.error)alert(d.error);
+    else {
+      renderProgress({status:'running',step:'Starting fetch...',progress:1,total_groups:0,elapsed_time:0});
+      if (typeof pollProgress === 'function') pollProgress();
+    }
+  });
+}
+
+function loadSavedCreds(){
+  fetch('/api/credentials/load',{method:'POST'}).then(r=>r.json()).then(d=>{
+    if(d.username) document.getElementById('fetch-email').value=d.username;
+    if(d.has_saved_credentials) alert('A saved password is available. Re-enter it to start a new session.');
+  });
+}
+
+fetch('/api/credentials').then(r=>r.json()).then(d=>{
+  if(d.has_saved_credentials) document.getElementById('saved-creds-banner').classList.remove('d-none');
+});
+</script>
+{% endblock %}

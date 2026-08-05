@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+{% block title %}Analytics — AIPostX{% endblock %}
+{% block page_title %}Analytics{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+{% if error_message is defined and error_message %}
+<div class="alert alert-warning"><i class="bi bi-exclamation-triangle me-2"></i>{{ error_message }}</div>
+{% endif %}
+
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
+  <div>
+    <p class="small mb-0" style="color:var(--text-muted)">
+      Метрики собираются автоматически через facebook-scraper (+1ч, +24ч, +7д)
+    </p>
+  </div>
+  <div class="d-flex align-items-center gap-2">
+    <span class="badge {% if worker_mode == 'rq' %}bg-success{% else %}bg-secondary{% endif %}">
+      Worker: {{ worker_mode }}
+    </span>
+    <button type="button" class="btn btn-sm btn-primary" id="refreshAnalyticsBtn">
+      <i class="bi bi-arrow-clockwise me-1"></i>Обновить метрики
+    </button>
+  </div>
+</div>
+
+<!-- Stats row -->
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-xl-3">
+    <div class="stat-card text-center">
+      <div class="stat-val" id="statTotalPosts">{{ total_posts }}</div>
+      <div class="stat-lbl"><i class="bi bi-send-fill me-1"></i>Total Posts</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="stat-card text-center">
+      <div class="stat-val" id="statSuccessRate">{{ "%.1f"|format(success_rate) }}%</div>
+      <div class="stat-lbl"><i class="bi bi-check-circle-fill me-1"></i>Success Rate</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="stat-card text-center">
+      <div class="stat-val" id="statActiveGroups">{{ active_groups }}</div>
+      <div class="stat-lbl"><i class="bi bi-people-fill me-1"></i>Active Groups</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="stat-card text-center">
+      <div class="stat-val" id="statAvgEngagement">{{ "%.2f"|format(avg_engagement_rate) }}%</div>
+      <div class="stat-lbl"><i class="bi bi-graph-up-arrow me-1"></i>Avg Engagement</div>
+    </div>
+  </div>
+</div>
+
+<!-- Checks status -->
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body text-center">
+        <div class="h4 mb-1" id="statScrapedPosts">{{ scraped_posts|default(0) }}</div>
+        <div class="small" style="color:var(--text-muted)">Постов с реальными метриками</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body text-center">
+        <div class="h4 mb-1 text-warning" id="statPendingChecks">{{ pending_checks|default(0) }}</div>
+        <div class="small" style="color:var(--text-muted)">Ожидают проверки</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body text-center">
+        <div class="h4 mb-1 text-success" id="statCompletedChecks">{{ completed_checks|default(0) }}</div>
+        <div class="small" style="color:var(--text-muted)">Проверок завершено (failed: {{ failed_checks|default(0) }})</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Charts -->
+<div class="row g-4 mb-4">
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-header d-flex align-items-center gap-2">
+        <i class="bi bi-bar-chart-fill" style="color:var(--accent)"></i> Weekly Performance
+      </div>
+      <div class="card-body" style="height:280px">
+        <canvas id="perfChart"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card">
+      <div class="card-header d-flex align-items-center gap-2">
+        <i class="bi bi-pie-chart-fill" style="color:var(--accent-amber)"></i> Engagement Breakdown
+      </div>
+      <div class="card-body" style="height:280px">
+        <canvas id="engChart"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Recent Posts -->
+<div class="card mb-4">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-clock-history" style="color:var(--accent)"></i> Recent Posts
+  </div>
+  <div class="card-body p-0">
+    {% if recent_posts %}
+    <div class="table-responsive">
+      <table class="table mb-0" id="recentPostsTable">
+        <thead>
+          <tr>
+            <th>Group</th>
+            <th>Message</th>
+            <th>Posted</th>
+            <th>Likes</th>
+            <th>Comments</th>
+            <th>Shares</th>
+            <th>Source</th>
+            <th>Link</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for post in recent_posts %}
+        <tr>
+          <td><span class="small fw-semibold">{{ post.group_name or 'Unknown' }}</span></td>
+          <td><span class="small text-truncate d-inline-block" style="max-width:200px">{{ post.message_text or '' }}</span></td>
+          <td><small style="color:var(--text-muted)">{{ (post.posted_at or '')[:16] }}</small></td>
+          <td>{{ post.likes_24h or post.likes_1h or 0 }}</td>
+          <td>{{ post.comments_24h or post.comments_1h or 0 }}</td>
+          <td>{{ post.shares_24h or post.shares_1h or 0 }}</td>
+          <td>
+            {% if post.metrics_source == 'facebook_scraper' %}
+            <span class="badge bg-success">real</span>
+            {% elif post.metrics_source == 'permalink' %}
+            <span class="badge bg-info">permalink</span>
+            {% else %}
+            <span class="badge bg-secondary">estimated / synthetic</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if post.post_url %}
+            <a href="{{ post.post_url }}" target="_blank" rel="noopener" class="small">Open</a>
+            {% else %}
+            <span class="small" style="color:var(--text-muted)">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center py-4">
+      <p class="small mb-0" style="color:var(--text-muted)">Нет постов для отображения. Запустите кампанию.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Top Groups -->
+{% if top_groups %}
+<div class="card mb-4">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-trophy-fill" style="color:var(--accent-amber)"></i> Top Performing Groups
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+    <table class="table mb-0">
+      <thead><tr><th>#</th><th>Group</th><th>Posts</th><th>Success Rate</th><th>Engagement</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for g in top_groups %}
+      <tr>
+        <td style="color:var(--text-muted)">{{ loop.index }}</td>
+        <td><span class="fw-semibold small">{{ g.group_name or (g.group_url[:40] + '...' if g.group_url else 'Unknown') }}</span></td>
+        <td>{{ g.total_posts or 0 }}</td>
+        <td>
+          <div class="d-flex align-items-center gap-2">
+            <div class="progress flex-grow-1" style="max-width:80px;height:6px">
+              <div class="progress-bar" style="width:{{ (g.post_success_rate or 0)*100 }}%;background:var(--accent-green)"></div>
+            </div>
+            <small>{{ "%.0f"|format((g.post_success_rate or 0)*100) }}%</small>
+          </div>
+        </td>
+        <td>{{ "%.2f"|format((g.avg_engagement_rate or 0) * 100) }}%</td>
+        <td>
+          {% if g.consecutive_failures and g.consecutive_failures >= 2 %}
+          <span class="badge bg-danger">Avoid</span>
+          {% elif g.recommendation_score and g.recommendation_score >= 0.8 %}
+          <span class="badge bg-success">Recommended</span>
+          {% else %}
+          <span class="badge bg-secondary">Normal</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="text-center py-5">
+  <div style="width:72px;height:72px;background:rgba(99,102,241,.08);border-radius:20px;display:inline-flex;align-items:center;justify-content:center;margin-bottom:16px">
+    <i class="bi bi-bar-chart-line" style="font-size:2rem;color:var(--text-muted)"></i>
+  </div>
+  <h6 class="mt-2" style="color:var(--text-secondary)">No analytics data yet</h6>
+  <p class="small" style="color:var(--text-muted)">Start posting to groups to see analytics here.</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+var perfCtx=document.getElementById('perfChart').getContext('2d');
+var perfChart=new Chart(perfCtx,{type:'bar',data:{
+  labels:{{ performance_dates|tojson }},
+  datasets:[{label:'Engagement Rate (%)',data:{{ performance_data|tojson }},
+    backgroundColor:'rgba(99,102,241,.6)',borderColor:'#6366f1',borderWidth:2,borderRadius:8}]
+},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#6b7a99',font:{family:'DM Sans'}}}},
+  scales:{x:{ticks:{color:'#4a5568',font:{family:'DM Sans'}},grid:{color:'rgba(21,31,50,.5)'}},y:{ticks:{color:'#4a5568',font:{family:'DM Sans'}},grid:{color:'rgba(21,31,50,.5)'}}}}});
+
+var engCtx=document.getElementById('engChart').getContext('2d');
+var engChart=new Chart(engCtx,{type:'doughnut',data:{
+  labels:['Likes','Comments','Shares'],
+  datasets:[{data:{{ engagement_breakdown|tojson }},
+    backgroundColor:['rgba(99,102,241,.8)','rgba(16,185,129,.8)','rgba(245,158,11,.8)'],
+    borderColor:['#6366f1','#10b981','#f59e0b'],borderWidth:2}]
+},options:{responsive:true,maintainAspectRatio:false,cutout:'65%',plugins:{legend:{position:'bottom',labels:{color:'#6b7a99',padding:15,font:{family:'DM Sans'}}}}}});
+
+function getToken(){
+  return localStorage.getItem('access_token') || localStorage.getItem('token') || '';
+}
+
+document.getElementById('refreshAnalyticsBtn').addEventListener('click', async function(){
+  var btn=this;
+  btn.disabled=true;
+  btn.innerHTML='<span class="spinner-border spinner-border-sm me-1"></span>Обновление...';
+  try{
+    var res=await fetch('/api/analytics/refresh',{method:'POST',headers:{'Authorization':'Bearer '+getToken(),'Content-Type':'application/json'}});
+    var data=await res.json();
+    if(!res.ok) throw new Error(data.error||'Refresh failed');
+    if(data.dashboard){
+      var d=data.dashboard;
+      document.getElementById('statTotalPosts').textContent=d.total_posts||0;
+      document.getElementById('statSuccessRate').textContent=(d.success_rate||0).toFixed(1)+'%';
+      document.getElementById('statActiveGroups').textContent=d.active_groups||0;
+      document.getElementById('statAvgEngagement').textContent=(d.avg_engagement_rate||0).toFixed(2)+'%';
+      document.getElementById('statScrapedPosts').textContent=d.scraped_posts||0;
+      document.getElementById('statPendingChecks').textContent=d.pending_checks||0;
+      document.getElementById('statCompletedChecks').textContent=d.completed_checks||0;
+      perfChart.data.labels=d.performance_dates||[];
+      perfChart.data.datasets[0].data=d.performance_data||[];
+      perfChart.update();
+      engChart.data.datasets[0].data=d.engagement_breakdown||[0,0,0];
+      engChart.update();
+    }
+    btn.innerHTML='<i class="bi bi-check-lg me-1"></i>Готово';
+    setTimeout(function(){btn.innerHTML='<i class="bi bi-arrow-clockwise me-1"></i>Обновить метрики';btn.disabled=false;},1500);
+  }catch(err){
+    btn.innerHTML='<i class="bi bi-exclamation-triangle me-1"></i>Ошибка';
+    setTimeout(function(){btn.innerHTML='<i class="bi bi-arrow-clockwise me-1"></i>Обновить метрики';btn.disabled=false;},2000);
+    console.error(err);
+  }
+});
+</script>
+{% endblock %}

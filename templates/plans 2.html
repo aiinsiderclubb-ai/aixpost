@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+
+{% block title %}Plans & Pricing - AIPostX{% endblock %}
+
+{% block page_title %}Plans & Pricing{% endblock %}
+
+{% block page_actions %}
+<div class="d-flex align-items-center">
+    <span class="badge bg-{{ plans[current_user.current_plan]['color'] }} me-2">
+        Current: {{ current_user.current_plan }}
+    </span>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="alert alert-info">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-info-circle me-3 fs-4"></i>
+                <div>
+                    <h6 class="mb-1">How to upgrade your plan:</h6>
+                    <p class="mb-0">
+                        Click "Upgrade" → Contact our support via Telegram → Make payment → Get instant plan activation!
+                        <br><small class="text-muted">Manual activation usually takes 5-15 minutes during business hours.</small>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    {% for plan_key, plan in plans.items() %}
+    <div class="col-lg-4 mb-4">
+        <div class="card h-100 {% if plan.is_current %}border-{{ plan.color }} border-2{% endif %} position-relative">
+            {% if plan.is_current %}
+            <div class="position-absolute top-0 start-50 translate-middle">
+                <span class="badge bg-{{ plan.color }} px-3 py-2">
+                    <i class="bi bi-check-circle me-1"></i>Your Current Plan
+                </span>
+            </div>
+            {% endif %}
+            
+            <div class="card-header bg-{{ plan.color }} text-white text-center py-4">
+                <h3 class="card-title mb-0">{{ plan.name }}</h3>
+                <div class="display-4 fw-bold mt-2">{{ plan.price }}</div>
+                <small>{{ plan.price_period }}</small>
+            </div>
+            
+            <div class="card-body d-flex flex-column">
+                <p class="text-muted text-center mb-4">{{ plan.limits }}</p>
+                
+                <ul class="list-unstyled flex-grow-1">
+                    {% for feature in plan.features %}
+                    <li class="mb-2">
+                        {% if feature.startswith('✅') %}
+                        <i class="bi bi-check-circle-fill text-success me-2"></i>{{ feature[2:] }}
+                        {% else %}
+                        <i class="bi bi-x-circle-fill text-muted me-2"></i>{{ feature[2:] }}
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                
+                <div class="mt-4">
+                    {% if plan.is_current %}
+                    <button class="btn btn-outline-{{ plan.color }} w-100" disabled>
+                        <i class="bi bi-check-circle me-2"></i>{{ plan.button_text }}
+                    </button>
+                    {% elif plan_key == 'FREE' %}
+                    <button class="btn btn-outline-secondary w-100" disabled>
+                        <i class="bi bi-arrow-down-circle me-2"></i>Downgrade
+                    </button>
+                    {% else %}
+                    <a href="https://t.me/vladyslavarcher" 
+                       target="_blank" 
+                       rel="noopener noreferrer"
+                       class="btn btn-{{ plan.color }} w-100"
+                       onclick="trackUpgradeClick('{{ plan_key }}')">
+                        <i class="bi bi-telegram me-2"></i>{{ plan.button_text }}
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            
+            {% if plan_key == 'PLUS' %}
+            <div class="ribbon">
+                <span class="ribbon-text">Most Popular</span>
+            </div>
+            {% elif plan_key == 'PREMIUM' %}
+            <div class="ribbon premium">
+                <span class="ribbon-text">Best Value</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Upgrade Process Information -->
+<div class="row mt-5">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-question-circle me-2"></i>How does the upgrade process work?
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3 text-center mb-3">
+                        <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-2" 
+                             style="width: 60px; height: 60px;">
+                            <i class="bi bi-1-circle fs-3"></i>
+                        </div>
+                        <h6>Click Upgrade</h6>
+                        <p class="text-muted small">Choose your desired plan and click the upgrade button</p>
+                    </div>
+                    <div class="col-md-3 text-center mb-3">
+                        <div class="bg-info text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-2" 
+                             style="width: 60px; height: 60px;">
+                            <i class="bi bi-2-circle fs-3"></i>
+                        </div>
+                        <h6>Contact Support</h6>
+                        <p class="text-muted small">You'll be redirected to our Telegram support chat</p>
+                    </div>
+                    <div class="col-md-3 text-center mb-3">
+                        <div class="bg-warning text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-2" 
+                             style="width: 60px; height: 60px;">
+                            <i class="bi bi-3-circle fs-3"></i>
+                        </div>
+                        <h6>Make Payment</h6>
+                        <p class="text-muted small">Complete payment via provided payment method</p>
+                    </div>
+                    <div class="col-md-3 text-center mb-3">
+                        <div class="bg-success text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-2" 
+                             style="width: 60px; height: 60px;">
+                            <i class="bi bi-4-circle fs-3"></i>
+                        </div>
+                        <h6>Plan Activated</h6>
+                        <p class="text-muted small">Your account will be upgraded within 15 minutes</p>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info mt-4">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6><i class="bi bi-shield-check text-success me-2"></i>Why manual activation?</h6>
+                            <ul class="small text-muted mb-0">
+                                <li>Ensures secure payment processing</li>
+                                <li>Personal support for each customer</li>
+                                <li>Flexible payment options available</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6><i class="bi bi-clock text-primary me-2"></i>Support Hours:</h6>
+                            <ul class="small text-muted mb-0">
+                                <li>Monday - Friday: 9 AM - 6 PM (EST)</li>
+                                <li>Weekend: 12 PM - 4 PM (EST)</li>
+                                <li>Response time: Usually under 15 minutes</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Comparison Table -->
+<div class="row mt-5">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-table me-2"></i>Detailed Feature Comparison
+                </h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-striped mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Feature</th>
+                                <th class="text-center">FREE</th>
+                                <th class="text-center">PLUS</th>
+                                <th class="text-center">PREMIUM</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Group Discovery Limit</td>
+                                <td class="text-center">50 groups</td>
+                                <td class="text-center">500 groups</td>
+                                <td class="text-center">Unlimited</td>
+                            </tr>
+                            <tr>
+                                <td>Posting Limit</td>
+                                <td class="text-center">5 groups</td>
+                                <td class="text-center">50 groups</td>
+                                <td class="text-center">Unlimited</td>
+                            </tr>
+                            <tr>
+                                <td>Auto-Scheduling</td>
+                                <td class="text-center"><i class="bi bi-x-lg text-danger"></i></td>
+                                <td class="text-center"><i class="bi bi-check-lg text-success"></i></td>
+                                <td class="text-center"><i class="bi bi-check-lg text-success"></i></td>
+                            </tr>
+                            <tr>
+                                <td>Advanced Analytics</td>
+                                <td class="text-center"><i class="bi bi-x-lg text-danger"></i></td>
+                                <td class="text-center"><i class="bi bi-check-lg text-success"></i></td>
+                                <td class="text-center"><i class="bi bi-check-lg text-success"></i></td>
+                            </tr>
+                            <tr>
+                                <td>Priority Support</td>
+                                <td class="text-center"><i class="bi bi-x-lg text-danger"></i></td>
+                                <td class="text-center"><i class="bi bi-x-lg text-danger"></i></td>
+                                <td class="text-center"><i class="bi bi-check-lg text-success"></i></td>
+                            </tr>
+                            <tr>
+                                <td>Custom Integrations</td>
+                                <td class="text-center"><i class="bi bi-x-lg text-danger"></i></td>
+                                <td class="text-center"><i class="bi bi-x-lg text-danger"></i></td>
+                                <td class="text-center"><i class="bi bi-check-lg text-success"></i></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.ribbon {
+    position: absolute;
+    top: 15px;
+    right: -15px;
+    background: #007bff;
+    color: white;
+    padding: 5px 25px;
+    font-size: 12px;
+    font-weight: bold;
+    transform: rotate(45deg);
+    text-transform: uppercase;
+}
+
+.ribbon.premium {
+    background: #ffc107;
+    color: #000;
+}
+
+.ribbon-text {
+    white-space: nowrap;
+}
+</style>
+
+<script>
+function trackUpgradeClick(planName) {
+    // Track upgrade button clicks for analytics
+    console.log('User clicked upgrade for plan:', planName);
+    
+    // Show a helpful message
+    setTimeout(() => {
+        if (confirm('You will be redirected to our Telegram support. Make sure to mention the plan you want to upgrade to: ' + planName)) {
+            // The link will already handle the redirect
+        }
+    }, 100);
+}
+</script>
+{% endblock %} 

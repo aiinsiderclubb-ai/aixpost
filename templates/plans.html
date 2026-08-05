@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Plans & Pricing — AIPostX{% endblock %}
+{% block page_title %}Plans & Pricing{% endblock %}
+
+{% block content %}
+<div class="text-center mb-5">
+  <h2 class="fw-bold" style="background:linear-gradient(135deg,var(--text-primary),var(--accent-light));-webkit-background-clip:text;-webkit-text-fill-color:transparent">Choose Your Plan</h2>
+  <p style="color:var(--text-secondary)">Upgrade to unlock more groups, unlimited posting and priority support</p>
+</div>
+
+<div class="row g-4 justify-content-center mb-5">
+  {% set plans_data = plans if plans is defined else {
+    'FREE':{'name':'FREE','price':'$0','price_period':'forever','color':'secondary','features':['Up to 50 groups','5 posts per day','Auto-scheduling','Analytics','Priority support'],'feature_status':[true,true,false,false,false],'button_text':'Current Plan','is_current':true},
+    'PLUS':{'name':'PLUS','price':'$29','price_period':'per month','color':'primary','features':['Up to 500 groups','50 posts per day','Auto-scheduling','Analytics','Priority support'],'feature_status':[true,true,true,true,false],'button_text':'Upgrade to PLUS','is_current':false},
+    'PREMIUM':{'name':'PREMIUM','price':'$79','price_period':'per month','color':'warning','features':['Unlimited groups','Unlimited posts','Auto-scheduling','Advanced analytics','Priority support'],'feature_status':[true,true,true,true,true],'button_text':'Upgrade to PREMIUM','is_current':false}
+  } %}
+  {% for plan_key, plan in plans_data.items() %}
+  <div class="col-md-4" style="max-width:360px">
+    <div class="card h-100 {% if plan.is_current %}border-2{% endif %}" style="{% if plan.is_current %}border-color:var(--accent){% endif %};position:relative;{% if plan_key == 'PLUS' %}box-shadow:0 0 60px rgba(99,102,241,.12){% endif %}">
+      {% if plan_key == 'PLUS' %}
+      <div class="position-absolute top-0 start-50 translate-middle">
+        <span class="badge px-3 py-2 rounded-pill" style="background:var(--accent);font-size:.72rem">Most Popular</span>
+      </div>
+      {% endif %}
+      <div class="card-header text-center py-4 border-0" style="background:{% if plan.color=='primary' %}rgba(99,102,241,.08){% elif plan.color=='warning' %}rgba(245,158,11,.08){% else %}rgba(255,255,255,.02){% endif %}">
+        <div class="mb-1" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.12em;color:var(--text-muted);font-weight:600">{{ plan.name }}</div>
+        <div style="font-size:2.8rem;font-weight:800;background:linear-gradient(135deg,{% if plan.color=='primary' %}var(--accent-light),#a855f7{% elif plan.color=='warning' %}var(--accent-amber),#ef4444{% else %}var(--text-secondary),var(--text-muted){% endif %});-webkit-background-clip:text;-webkit-text-fill-color:transparent">{{ plan.price }}</div>
+        <div style="color:var(--text-muted);font-size:.85rem">{{ plan.price_period }}</div>
+      </div>
+      <div class="card-body py-4">
+        <ul class="list-unstyled mb-4">
+          {% for feature in plan.features %}
+          {% set enabled = plan.feature_status[loop.index0] if plan.feature_status is defined else feature.startswith('✅') %}
+          <li class="d-flex align-items-center gap-2 mb-3" style="font-size:.875rem">
+            {% if enabled %}
+            <i class="bi bi-check-circle-fill flex-shrink-0" style="color:var(--accent-green)"></i>
+            <span>{{ feature }}</span>
+            {% else %}
+            <i class="bi bi-x-circle flex-shrink-0" style="color:var(--text-muted);opacity:.4"></i>
+            <span style="color:var(--text-muted)">{{ feature }}</span>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% if plan.is_current %}
+        <button class="btn btn-outline-secondary w-100" disabled>
+          <i class="bi bi-check-circle me-2"></i>{{ plan.button_text }}
+        </button>
+        {% else %}
+        <a href="https://t.me/vladyslavarcher" target="_blank" class="btn btn-{% if plan.color == 'warning' %}warning{% else %}primary{% endif %} w-100">
+          <i class="bi bi-telegram me-2"></i>{{ plan.button_text }}
+        </a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="card" style="max-width:700px;margin:0 auto">
+  <div class="card-body text-center py-4">
+    <div style="width:56px;height:56px;background:rgba(99,102,241,.1);border-radius:14px;display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px">
+      <i class="bi bi-headset" style="font-size:1.5rem;color:var(--accent)"></i>
+    </div>
+    <h5>Need help choosing?</h5>
+    <p class="small mb-3" style="color:var(--text-muted)">Contact us on Telegram and we'll help you find the right plan.</p>
+    <a href="https://t.me/vladyslavarcher" target="_blank" class="btn btn-info">
+      <i class="bi bi-telegram me-2"></i>Chat on Telegram
+    </a>
+  </div>
+</div>
+{% endblock %}

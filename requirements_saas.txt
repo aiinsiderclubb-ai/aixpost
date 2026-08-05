@@ -1,0 +1,148 @@
+# Flask Core and Extensions
+Flask==2.3.3
+Flask-SQLAlchemy==3.0.5
+Flask-Migrate==4.0.5
+Flask-Mail==0.9.1
+Flask-JWT-Extended==4.5.3
+Flask-CORS==4.0.0
+Flask-Limiter==3.5.0
+Werkzeug==2.3.7
+
+# Database
+psycopg2-binary==2.9.7
+SQLAlchemy==2.0.23
+alembic==1.12.1
+
+# Redis and Caching
+redis==5.0.1
+redis-py-cluster==2.1.3
+
+# Background Tasks
+celery==5.3.4
+celery[redis]==5.3.4
+
+# Web Scraping and Automation (existing bot functionality)
+selenium==4.15.2
+webdriver-manager==4.0.1
+
+# HTTP Requests
+requests==2.31.0
+urllib3==2.0.7
+
+# Data Processing
+pandas==2.1.3
+openpyxl==3.1.2
+numpy==1.25.2
+
+# Payments
+stripe==7.8.0
+
+# Email
+sendgrid==6.10.0
+
+# Authentication and Security
+bcrypt==4.1.1
+cryptography==41.0.8
+PyJWT==2.8.0
+python-jose[cryptography]==3.3.0
+
+# Configuration and Environment
+python-dotenv==1.0.0
+click==8.1.7
+
+# Validation and Serialization
+marshmallow==3.20.1
+email-validator==2.1.0
+phonenumbers==8.13.25
+
+# Monitoring and Logging
+sentry-sdk[flask]==1.38.0
+
+# Testing
+pytest==7.4.3
+pytest-flask==1.3.0
+pytest-cov==4.1.0
+factory-boy==3.3.1
+
+# Development
+python-decouple==3.8
+
+# Language Detection and Text Processing
+langdetect==1.0.9
+beautifulsoup4==4.12.2
+
+# File Processing
+python-magic==0.4.27
+
+# Task Scheduling
+schedule==1.2.0
+
+# Image Processing (for screenshots)
+Pillow==10.1.0
+
+# API Documentation
+flask-apispec==0.11.4
+apispec==6.3.1
+
+# Production Server
+gunicorn==21.2.0
+
+# Database Connection Pooling
+psycopg2-pool==1.1
+
+# Timezone Handling
+pytz==2023.3
+
+# Date and Time Utilities
+python-dateutil==2.8.2
+
+# JSON Web Tokens
+pyjwt==2.8.0
+
+# Rate Limiting
+slowapi==0.1.9
+
+# Process Management
+supervisor==4.2.5
+
+# Environment Variables
+environs==10.0.0
+
+# HTTP Client
+httpx==0.25.2
+
+# Async Support
+asyncio==3.4.3
+
+# Data Validation
+cerberus==1.3.5
+
+# Caching
+cachetools==5.3.2
+
+# UUID Generation
+uuid==1.30
+
+# Regular Expressions
+regex==2023.10.3
+
+# File System Operations
+pathlib==1.0.1
+
+# Configuration Management
+dynaconf==3.2.4
+
+# API Rate Limiting
+flask-limiter==3.5.0
+
+# WSGI Server
+uwsgi==2.0.23
+
+# Production Dependencies
+whitenoise==6.6.0
+
+# Monitoring
+prometheus-flask-exporter==0.23.0
+
+# Health Checks
+py-healthcheck==1.10.1 

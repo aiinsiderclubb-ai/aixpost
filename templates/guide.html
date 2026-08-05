@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}How It Works — AIPostX{% endblock %}
+{% block page_title %}How It Works{% endblock %}
+
+{% block content %}
+<div style="max-width:860px">
+  <div class="alert alert-info mb-4">
+    <i class="bi bi-info-circle me-2"></i>
+    AIPostX automates Facebook group posting using Selenium browser automation. No Facebook API needed.
+  </div>
+
+  <!-- Steps -->
+  {% set steps = [
+    ('1','bi-people-fill','Fetch Your Groups','Go to Dashboard and enter your Facebook credentials. The bot logs in to your account and discovers all groups you\'ve joined.','accent'),
+    ('2','bi-pencil-square','Compose a Message','Go to Post to Groups. Write your message — emojis, line breaks and links are all supported.','green'),
+    ('3','bi-check2-all','Select Target Groups','Pick which groups to post to. You can select all, search by name, or choose manually.','amber'),
+    ('4','bi-send-fill','Start Posting','Click Start Posting. The bot opens Chrome, logs in, and posts to each group one by one with human-like delays.','cyan'),
+    ('5','bi-bar-chart-line-fill','Monitor Results','Watch live progress. After completion you\'ll see success/failure counts and can export results.','accent')
+  ] %}
+
+  {% for num, icon, title, desc, color in steps %}
+  <div class="d-flex gap-4 mb-4">
+    <div class="flex-shrink-0 d-flex align-items-center justify-content-center rounded-circle fw-bold"
+         style="width:50px;height:50px;
+                background:{% if color=='accent' %}rgba(99,102,241,.1){% elif color=='green' %}rgba(16,185,129,.1){% elif color=='amber' %}rgba(245,158,11,.1){% else %}rgba(6,182,212,.1){% endif %};
+                color:{% if color=='accent' %}var(--accent-light){% elif color=='green' %}var(--accent-green){% elif color=='amber' %}var(--accent-amber){% else %}var(--accent-cyan){% endif %};
+                font-size:1.1rem;border:1px solid {% if color=='accent' %}rgba(99,102,241,.2){% elif color=='green' %}rgba(16,185,129,.2){% elif color=='amber' %}rgba(245,158,11,.2){% else %}rgba(6,182,212,.2){% endif %}">
+      {{ num }}
+    </div>
+    <div class="card flex-grow-1">
+      <div class="card-body py-3">
+        <div class="fw-semibold mb-1"><i class="bi {{ icon }} me-2" style="color:var(--text-muted)"></i>{{ title }}</div>
+        <p class="small mb-0" style="color:var(--text-secondary)">{{ desc }}</p>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
+  <!-- FAQ -->
+  <h5 class="mt-5 mb-3" style="color:var(--text-secondary)"><i class="bi bi-question-circle me-2"></i>Frequently Asked Questions</h5>
+
+  <div class="accordion mb-4" id="faq">
+    {% set faqs = [
+      ('Is this safe for my Facebook account?','Use responsibly. Add delays between posts (the bot does this automatically). Avoid posting the same content to hundreds of groups at once.'),
+      ('What is headless mode?','Headless mode runs Chrome invisibly in the background. Disable it if you need to solve CAPTCHAs manually.'),
+      ('What if I get a CAPTCHA?','Disable headless mode in settings. The browser will open visibly and you can solve it manually. The bot will continue after.'),
+      ('What does "2FA" support mean?','If Facebook asks for a verification code, the bot pauses and waits. Enter the code in the visible browser window.'),
+      ('How fast does it post?','The bot uses random delays (5-15 seconds) between posts to mimic human behavior. Posting to 20 groups takes ~5-10 minutes.')
+    ] %}
+    {% for qa in faqs %}{% set i = loop.index0 %}{% set q = qa[0] %}{% set a = qa[1] %}
+    <div class="card mb-2">
+      <div class="card-header py-0" id="faq-h{{ i }}">
+        <button class="btn btn-link text-start w-100 py-3 text-decoration-none" style="color:var(--text-primary);font-size:.875rem" data-bs-toggle="collapse" data-bs-target="#faq-c{{ i }}">
+          <i class="bi bi-chevron-right me-2 small"></i>{{ q }}
+        </button>
+      </div>
+      <div id="faq-c{{ i }}" class="collapse" data-bs-parent="#faq">
+        <div class="card-body py-2 small" style="color:var(--text-secondary)">{{ a }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Support -->
+  <div class="card">
+    <div class="card-body text-center py-4">
+      <div style="width:56px;height:56px;background:rgba(99,102,241,.1);border-radius:14px;display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px">
+        <i class="bi bi-headset" style="font-size:1.5rem;color:var(--accent)"></i>
+      </div>
+      <h6>Need help?</h6>
+      <p class="small mb-3" style="color:var(--text-muted)">Contact us on Telegram for fast support.</p>
+      <a href="https://t.me/vladyslavarcher" target="_blank" class="btn btn-info btn-sm">
+        <i class="bi bi-telegram me-2"></i>Open Telegram Chat
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

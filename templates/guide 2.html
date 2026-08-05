@@ -1,0 +1,531 @@
+{% extends "base.html" %}
+
+{% block title %}How It Works - AIPostX{% endblock %}
+
+{% block page_title %}📘 How It Works{% endblock %}
+
+{% block page_actions %}
+<div class="dropdown">
+    <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+        <i class="bi bi-share me-2"></i>Quick Links
+    </button>
+    <ul class="dropdown-menu dropdown-menu-dark">
+        <li><a class="dropdown-item" href="#fetch">
+            <i class="bi bi-download me-2"></i>Fetching Groups
+        </a></li>
+        <li><a class="dropdown-item" href="#post">
+            <i class="bi bi-send me-2"></i>Creating Posts
+        </a></li>
+        <li><a class="dropdown-item" href="#schedule">
+            <i class="bi bi-calendar me-2"></i>Scheduling
+        </a></li>
+        <li><a class="dropdown-item" href="#analytics">
+            <i class="bi bi-graph-up me-2"></i>Analytics
+        </a></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><a class="dropdown-item" href="{{ url_for('dashboard') }}">
+            <i class="bi bi-speedometer2 me-2"></i>Back to Dashboard
+        </a></li>
+    </ul>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Quick Navigation -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-primary">
+            <div class="card-body">
+                <h5 class="text-primary mb-3">
+                    <i class="bi bi-map me-2"></i>Quick Navigation
+                </h5>
+                <div class="row">
+                    <div class="col-md-3 mb-2">
+                        <a href="#fetch" class="btn btn-outline-primary w-100">
+                            <i class="bi bi-1-circle me-2"></i>Fetching Groups
+                        </a>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <a href="#post" class="btn btn-outline-primary w-100">
+                            <i class="bi bi-2-circle me-2"></i>Creating Posts
+                        </a>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <a href="#schedule" class="btn btn-outline-primary w-100">
+                            <i class="bi bi-3-circle me-2"></i>Scheduling
+                        </a>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <a href="#analytics" class="btn btn-outline-primary w-100">
+                            <i class="bi bi-4-circle me-2"></i>Analytics
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Guide Content -->
+<div class="row">
+    <div class="col-lg-9">
+        <!-- Section 1: Fetching Groups -->
+        <div id="fetch" class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">
+                    <i class="bi bi-1-circle me-2"></i>Fetching Groups
+                </h4>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <h5 class="text-primary">How does group fetching work?</h5>
+                        <p class="mb-3">
+                            AIPostX automatically discovers all Facebook groups you're a member of by securely logging into your account 
+                            and scanning your group memberships. This process is completely automated and typically takes 2-5 minutes.
+                        </p>
+                        
+                        <h6>The Process:</h6>
+                        <ol>
+                            <li><strong>Secure Login:</strong> Your credentials are encrypted and stored locally</li>
+                            <li><strong>Group Discovery:</strong> We scan your Facebook profile for group memberships</li>
+                            <li><strong>Data Collection:</strong> Group names, URLs, member counts, and activity levels are saved</li>
+                            <li><strong>Organization:</strong> Groups are categorized by language and activity for easy management</li>
+                        </ol>
+                        
+                        <div class="alert alert-info">
+                            <i class="bi bi-lightbulb me-2"></i>
+                            <strong>Pro Tip:</strong> Use headless mode for faster fetching, or disable it if you encounter issues.
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-secondary bg-opacity-10 border">
+                            <div class="card-body text-center">
+                                <i class="bi bi-download text-primary" style="font-size: 3rem;"></i>
+                                <h6 class="text-dark mt-2">Quick Start</h6>
+                                <p class="text-dark small">
+                                    Go to Dashboard → Enter credentials → Click "Start Fetching"
+                                </p>
+                                <a href="{{ url_for('dashboard') }}" class="btn btn-primary btn-sm">
+                                    Start Now
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <h6>Common Questions:</h6>
+                <div class="accordion" id="fetchAccordion">
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#fetch-q1">
+                                How long does fetching take?
+                            </button>
+                        </h2>
+                        <div id="fetch-q1" class="accordion-collapse collapse" data-bs-parent="#fetchAccordion">
+                            <div class="accordion-body">
+                                Typically 2-5 minutes depending on how many groups you're in. Large accounts (500+ groups) may take up to 10 minutes.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#fetch-q2">
+                                Is my data secure?
+                            </button>
+                        </h2>
+                        <div id="fetch-q2" class="accordion-collapse collapse" data-bs-parent="#fetchAccordion">
+                            <div class="accordion-body">
+                                Yes! Your credentials are encrypted using military-grade encryption and stored locally. We never store your password on our servers.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#fetch-q3">
+                                What if I get a CAPTCHA?
+                            </button>
+                        </h2>
+                        <div id="fetch-q3" class="accordion-collapse collapse" data-bs-parent="#fetchAccordion">
+                            <div class="accordion-body">
+                                Turn off headless mode and solve the CAPTCHA manually when prompted. The process will continue automatically after solving.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 2: Creating Posts -->
+        <div id="post" class="card mb-4">
+            <div class="card-header bg-success text-white">
+                <h4 class="mb-0">
+                    <i class="bi bi-2-circle me-2"></i>Creating Post Templates
+                </h4>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <h5 class="text-success">How to create effective posts?</h5>
+                        <p class="mb-3">
+                            AIPostX provides powerful templating system that allows you to create dynamic, personalized messages 
+                            for each group while maintaining a natural, human-like appearance.
+                        </p>
+                        
+                        <h6>Template Variables:</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Variable</th>
+                                        <th>Description</th>
+                                        <th>Example</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>{{group_name}}</code></td>
+                                        <td>Name of the target group</td>
+                                        <td>"Digital Marketing Pro"</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>{{random_greeting}}</code></td>
+                                        <td>Random greeting phrase</td>
+                                        <td>"Hello everyone"</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>{{random_emoji}}</code></td>
+                                        <td>Random relevant emoji</td>
+                                        <td>"🚀"</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>{{time_based}}</code></td>
+                                        <td>Time-based greeting</td>
+                                        <td>"Good morning"</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <div class="alert alert-success">
+                            <i class="bi bi-magic me-2"></i>
+                            <strong>AI Enhancement:</strong> Use variables to make each post unique and avoid spam detection.
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-secondary bg-opacity-10 border">
+                            <div class="card-body">
+                                <h6 class="text-dark">Example Template</h6>
+                                <div class="bg-dark bg-opacity-10 p-2 rounded border">
+                                    <code class="small text-dark">
+                                        {{random_greeting}} {{group_name}}! 🚀<br><br>
+                                        I wanted to share an amazing opportunity...<br><br>
+                                        {{random_emoji}} What do you think?
+                                    </code>
+                                </div>
+                                <small class="text-dark mt-2 d-block">
+                                    This creates unique messages for each group
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <h6>Best Practices:</h6>
+                <ul>
+                    <li><strong>Keep it personal:</strong> Use variables to reference the group name</li>
+                    <li><strong>Be authentic:</strong> Write in your natural voice and style</li>
+                    <li><strong>Add value:</strong> Share useful information, not just promotional content</li>
+                    <li><strong>Use emojis sparingly:</strong> 1-2 emojis per message for engagement</li>
+                    <li><strong>Test first:</strong> Always preview your templates before mass posting</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Section 3: Scheduling -->
+        <div id="schedule" class="card mb-4">
+            <div class="card-header bg-warning text-dark">
+                <h4 class="mb-0">
+                    <i class="bi bi-3-circle me-2"></i>Scheduling & Automation
+                </h4>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <h5 class="text-warning">How does scheduling work?</h5>
+                        <p class="mb-3">
+                            Schedule your campaigns to run at optimal times for maximum engagement. Our intelligent scheduling 
+                            system respects platform limits and ensures your posts appear natural.
+                        </p>
+                        
+                        <h6>Scheduling Options:</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="card border-primary">
+                                    <div class="card-body text-center">
+                                        <i class="bi bi-clock text-primary fs-1"></i>
+                                        <h6 class="mt-2">Smart Delays</h6>
+                                        <p class="small text-muted">
+                                            Random delays between posts (10-60 seconds) to appear human-like
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card border-info">
+                                    <div class="card-body text-center">
+                                        <i class="bi bi-calendar-event text-info fs-1"></i>
+                                        <h6 class="mt-2">Scheduled Jobs</h6>
+                                        <p class="small text-muted">
+                                            Set up recurring campaigns for daily, weekly, or monthly posting
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle me-2"></i>
+                            <strong>Rate Limiting:</strong> Respect Facebook's limits. Max 20-30 posts per hour for safety.
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-secondary bg-opacity-10 border">
+                            <div class="card-body">
+                                <h6 class="text-dark">Optimal Times</h6>
+                                <ul class="list-unstyled text-dark">
+                                    <li><strong>📅 Weekdays:</strong> 9-11 AM, 2-4 PM</li>
+                                    <li><strong>📅 Weekends:</strong> 10 AM - 2 PM</li>
+                                    <li><strong>🌍 Time Zones:</strong> Target group's local time</li>
+                                    <li><strong>📊 Engagement:</strong> Check analytics for best times</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 4: Analytics -->
+        <div id="analytics" class="card mb-4">
+            <div class="card-header bg-info text-white">
+                <h4 class="mb-0">
+                    <i class="bi bi-4-circle me-2"></i>Analytics & Optimization
+                </h4>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <h5 class="text-info">How to analyze your performance?</h5>
+                        <p class="mb-3">
+                            Track your campaign performance with detailed analytics to optimize your posting strategy 
+                            and improve engagement rates over time.
+                        </p>
+                        
+                        <h6>Key Metrics:</h6>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="text-center mb-3">
+                                    <i class="bi bi-check-circle text-success fs-1"></i>
+                                    <h6>Success Rate</h6>
+                                    <p class="small text-muted">Percentage of successful posts</p>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="text-center mb-3">
+                                    <i class="bi bi-eye text-primary fs-1"></i>
+                                    <h6>Reach</h6>
+                                    <p class="small text-muted">Total people who saw your posts</p>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="text-center mb-3">
+                                    <i class="bi bi-heart text-danger fs-1"></i>
+                                    <h6>Engagement</h6>
+                                    <p class="small text-muted">Likes, comments, and shares</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="alert alert-info">
+                            <i class="bi bi-graph-up me-2"></i>
+                            <strong>Optimization Tips:</strong> Use analytics to identify top-performing groups and optimal posting times.
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-secondary bg-opacity-10 border">
+                            <div class="card-body text-center">
+                                <i class="bi bi-bar-chart text-info" style="font-size: 3rem;"></i>
+                                <h6 class="text-dark mt-2">View Analytics</h6>
+                                <p class="text-dark small">
+                                    Access detailed reports and insights
+                                </p>
+                                <a href="{{ url_for('analytics') }}" class="btn btn-info btn-sm">
+                                    Open Analytics
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Sidebar -->
+    <div class="col-lg-3">
+        <!-- Quick Help -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="bi bi-question-circle me-2"></i>Need Help?
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-outline-primary btn-sm" onclick="startTour()">
+                        <i class="bi bi-play-circle me-2"></i>Take Tour
+                    </button>
+                    <a href="https://t.me/vladyslavarcher" target="_blank" class="btn btn-outline-success btn-sm">
+                        <i class="bi bi-telegram me-2"></i>Contact Support
+                    </a>
+                    <a href="#" class="btn btn-outline-info btn-sm">
+                        <i class="bi bi-book me-2"></i>Documentation
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Video Tutorials -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="bi bi-play-btn me-2"></i>Video Tutorials
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="list-group list-group-flush">
+                    <a href="#" class="list-group-item list-group-item-action border-0 px-0">
+                        <i class="bi bi-play-circle me-2"></i>Getting Started (5 min)
+                    </a>
+                    <a href="#" class="list-group-item list-group-item-action border-0 px-0">
+                        <i class="bi bi-play-circle me-2"></i>Advanced Templates (8 min)
+                    </a>
+                    <a href="#" class="list-group-item list-group-item-action border-0 px-0">
+                        <i class="bi bi-play-circle me-2"></i>Scheduling Tips (6 min)
+                    </a>
+                    <a href="#" class="list-group-item list-group-item-action border-0 px-0">
+                        <i class="bi bi-play-circle me-2"></i>Analytics Deep Dive (12 min)
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Tips & Tricks -->
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="bi bi-lightbulb me-2"></i>Pro Tips
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="small">
+                    <div class="alert alert-primary py-2">
+                        <strong>Tip:</strong> Always test your templates with 2-3 groups before mass posting.
+                    </div>
+                    <div class="alert alert-success py-2">
+                        <strong>Tip:</strong> Use different message variations to avoid detection.
+                    </div>
+                    <div class="alert alert-warning py-2">
+                        <strong>Tip:</strong> Schedule posts during peak engagement hours for better results.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Smooth scrolling for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            target.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start'
+            });
+        }
+    });
+});
+
+// Highlight active section in navigation
+function updateActiveSection() {
+    const sections = ['fetch', 'post', 'schedule', 'analytics'];
+    const scrollPos = window.scrollY + 100;
+    
+    sections.forEach(section => {
+        const element = document.getElementById(section);
+        if (element) {
+            const offsetTop = element.offsetTop;
+            const offsetBottom = offsetTop + element.offsetHeight;
+            
+            if (scrollPos >= offsetTop && scrollPos < offsetBottom) {
+                // Highlight active section in quick navigation
+                document.querySelectorAll('.btn-outline-primary').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                const activeBtn = document.querySelector(`a[href="#${section}"]`);
+                if (activeBtn && activeBtn.classList.contains('btn-outline-primary')) {
+                    activeBtn.classList.add('active');
+                }
+            }
+        }
+    });
+}
+
+// Update active section on scroll
+window.addEventListener('scroll', updateActiveSection);
+
+// Placeholder for guided tour
+function startTour() {
+    alert('Guided tour coming soon! For now, follow the numbered sections above.');
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    updateActiveSection();
+});
+</script>
+
+<style>
+.btn-outline-primary.active {
+    background-color: var(--bs-primary);
+    color: white;
+    border-color: var(--bs-primary);
+}
+
+.accordion-button:not(.collapsed) {
+    background-color: rgba(var(--bs-primary-rgb), 0.1);
+    color: var(--bs-primary);
+}
+
+.card-header.bg-primary,
+.card-header.bg-success,
+.card-header.bg-warning,
+.card-header.bg-info {
+    border-radius: 15px 15px 0 0 !important;
+}
+
+code {
+    color: var(--bs-primary);
+    background-color: rgba(var(--bs-primary-rgb), 0.1);
+    padding: 2px 4px;
+    border-radius: 4px;
+}
+</style>
+{% endblock %} 

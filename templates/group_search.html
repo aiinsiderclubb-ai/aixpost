@@ -1,0 +1,386 @@
+{% extends "base.html" %}
+{% block title %}Find Groups — AIPostX{% endblock %}
+{% block page_title %}Find Facebook Groups{% endblock %}
+
+{% block page_actions %}
+<a href="{{ url_for('groups_page') }}" class="btn btn-sm btn-outline-primary">
+  <i class="bi bi-people-fill me-1"></i>My Groups ({{ total_groups }})
+</a>
+{% endblock %}
+
+{% block content %}
+{% if error_message is defined and error_message %}
+<div class="alert alert-warning"><i class="bi bi-exclamation-triangle me-2"></i>{{ error_message }}</div>
+{% endif %}
+<p class="small mb-4" style="color:var(--text-muted)">
+  Автоматически собирает все Facebook-группы, в которых состоит ваш аккаунт. Результаты сохраняются и доступны в разделе Groups.
+</p>
+
+<div class="row g-4 mb-4">
+  <!-- Fetch form -->
+  <div class="col-lg-5">
+    <div class="card h-100">
+      <div class="card-header d-flex align-items-center gap-2">
+        <i class="bi bi-search" style="color:var(--accent)"></i> Запуск поиска
+      </div>
+      <div class="card-body">
+        {% if has_saved_credentials %}
+        <div class="alert alert-success py-2 small mb-3">
+          <i class="bi bi-check-circle me-1"></i>
+          Сохранённые Facebook-данные найдены.
+          <a href="#" class="alert-link ms-1" onclick="loadSavedCreds();return false;">Подставить</a>
+        </div>
+        {% endif %}
+
+        <div class="mb-3">
+          <label class="form-label">Trusted account</label>
+          <select class="form-control" id="fetch-account"></select>
+          <div class="small mt-1" id="fetch-trust-line" style="color:var(--text-muted)">
+            Нужен Trusted аккаунт. <a href="{{ url_for('accounts_page') }}">Prepare на Accounts</a>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Facebook Email</label>
+          <input type="email" class="form-control" id="fetch-email" placeholder="your@email.com"
+                 value="{{ saved_username or '' }}">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Password</label>
+          <input type="password" class="form-control" id="fetch-password" placeholder="••••••••">
+        </div>
+
+        <div class="d-flex flex-column gap-2 mb-4">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="headless-mode">
+            <label class="form-check-label small" for="headless-mode">Headless mode (без окна браузера)</label>
+          </div>
+          <div class="alert alert-info py-2 small mb-0">
+            Для первого входа рекомендуем <strong>выключить headless</strong> — так проще пройти cookies/2FA.
+          </div>
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="use-session" checked>
+            <label class="form-check-label small" for="use-session">Использовать сохранённую сессию Chrome</label>
+          </div>
+        </div>
+
+        <button type="button" class="btn btn-primary w-100" id="startFetchBtn" onclick="startFetch()">
+          <i class="bi bi-play-fill me-1"></i>Начать поиск групп
+        </button>
+        <button type="button" class="btn btn-warning w-100 mt-2" id="resumeCaptchaBtn" style="display:none" onclick="resumeFetchCaptcha()">
+          Я прошёл CAPTCHA
+        </button>
+
+        {% if last_fetched_at %}
+        <div class="small mt-3 text-center" style="color:var(--text-muted)">
+          Последний сбор: {{ last_fetched_at }}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Progress -->
+  <div class="col-lg-7">
+    <div class="card h-100">
+      <div class="card-header d-flex align-items-center justify-content-between gap-2">
+        <div class="d-flex align-items-center gap-2">
+          <i class="bi bi-activity" style="color:var(--accent-green)"></i> Прогресс
+        </div>
+        <span class="badge" id="status-pill">idle</span>
+      </div>
+      <div class="card-body">
+        <div class="d-flex justify-content-between small mb-2" style="color:var(--text-muted)">
+          <span id="status-step">Ожидание запуска</span>
+          <span id="progress-percent">0%</span>
+        </div>
+        <div class="progress mb-3" style="height:10px">
+          <div class="progress-bar" id="progress-bar" style="width:0%;background:var(--accent)"></div>
+        </div>
+
+        <div class="row g-3 mb-3">
+          <div class="col-sm-4">
+            <div class="p-3 rounded text-center" style="background:var(--border-light)">
+              <div class="h4 mb-0" id="groups-found">{{ total_groups }}</div>
+              <div class="small" style="color:var(--text-muted)">Групп найдено</div>
+            </div>
+          </div>
+          <div class="col-sm-4">
+            <div class="p-3 rounded text-center" style="background:var(--border-light)">
+              <div class="h4 mb-0" id="scroll-info">0 / 0</div>
+              <div class="small" style="color:var(--text-muted)">Скролл</div>
+            </div>
+          </div>
+          <div class="col-sm-4">
+            <div class="p-3 rounded text-center" style="background:var(--border-light)">
+              <div class="h4 mb-0" id="elapsed-time">0s</div>
+              <div class="small" style="color:var(--text-muted)">Время</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="error-msg" class="alert alert-danger py-2 small d-none"></div>
+
+        {% if latest_fetch_task %}
+        <div class="small" style="color:var(--text-muted)">
+          Последняя задача: <strong>{{ latest_fetch_task.status }}</strong>
+          {% if latest_fetch_task.queue_mode %} · {{ latest_fetch_task.queue_mode }}{% endif %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Preview -->
+<div class="card mb-4">
+  <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+    <div class="d-flex align-items-center gap-2">
+      <i class="bi bi-collection-fill" style="color:var(--accent-amber)"></i>
+      <span>Результаты поиска</span>
+      <span class="badge bg-secondary" id="preview-count">{{ preview_groups|length }}</span>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <input type="text" class="form-control form-control-sm" id="preview-filter" placeholder="Фильтр по названию..." style="max-width:220px">
+      {% if total_groups > 0 %}
+      <a href="{{ url_for('groups_page') }}" class="btn btn-sm btn-outline-primary">Все группы</a>
+      <a href="{{ url_for('export_groups', format='csv') }}" class="btn btn-sm btn-outline-success">Export CSV</a>
+      {% endif %}
+    </div>
+  </div>
+  <div class="card-body p-0">
+    <div id="preview-empty" class="text-center py-5 {% if preview_groups %}d-none{% endif %}">
+      <i class="bi bi-search" style="font-size:2rem;color:var(--text-muted)"></i>
+      <p class="small mt-2 mb-0" style="color:var(--text-muted)">Запустите поиск — здесь появятся найденные группы</p>
+    </div>
+    <div class="table-responsive {% if not preview_groups %}d-none{% endif %}" id="preview-table-wrap">
+      <table class="table mb-0" id="preview-table">
+        <thead>
+          <tr>
+            <th>Название</th>
+            <th>Участники</th>
+            <th>Язык</th>
+            <th>Страна</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="preview-body">
+        {% for group in preview_groups %}
+        <tr data-name="{{ (group.name or '')|lower }}">
+          <td><span class="fw-semibold small">{{ group.name or 'Unknown' }}</span></td>
+          <td>{{ group.members or '—' }}</td>
+          <td>{{ group.language_tag or '—' }}</td>
+          <td>{{ group.country_name or group.country_tag or '—' }}</td>
+          <td>
+            {% if group.url %}
+            <a href="{{ group.url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary py-0">Open</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var socket = window.io ? io() : null;
+var pollTimer = null;
+
+function getToken(){
+  return localStorage.getItem('access_token') || '';
+}
+
+function setFetchRunning(running){
+  var btn = document.getElementById('startFetchBtn');
+  btn.disabled = running;
+  btn.innerHTML = running
+    ? '<span class="spinner-border spinner-border-sm me-1"></span>Поиск...'
+    : '<i class="bi bi-play-fill me-1"></i>Начать поиск групп';
+}
+
+function renderProgress(d){
+  var status = d.status || 'idle';
+  document.getElementById('status-pill').textContent = status === 'waiting_manual' ? 'CAPTCHA' : status;
+  document.getElementById('status-pill').className = 'badge ' + (
+    status === 'running' || status === 'waiting_manual' ? 'bg-warning text-dark' :
+    status === 'completed' ? 'bg-success' :
+    status === 'failed' ? 'bg-danger' : 'bg-secondary'
+  );
+  document.getElementById('status-step').textContent = d.message || d.step || 'Ожидание';
+  document.getElementById('progress-bar').style.width = (d.progress || 0) + '%';
+  document.getElementById('progress-percent').textContent = (d.progress || 0) + '%';
+  document.getElementById('groups-found').textContent = d.total_groups || 0;
+  document.getElementById('scroll-info').textContent = (d.current_scroll || 0) + ' / ' + (d.max_scroll || 0);
+  document.getElementById('elapsed-time').textContent = (d.elapsed_time || 0) + 's';
+
+  var err = document.getElementById('error-msg');
+  if (d.error) {
+    err.textContent = d.error;
+    err.className = 'alert alert-danger py-2 small';
+    err.classList.remove('d-none');
+  } else if (status === 'waiting_manual') {
+    err.textContent = d.message || 'Пройдите «I\'m not a robot» в окне Chrome. Браузер останется открытым до 10 минут.';
+    err.className = 'alert alert-warning py-2 small';
+    err.classList.remove('d-none');
+  } else {
+    err.classList.add('d-none');
+  }
+
+  setFetchRunning(status === 'running' || status === 'waiting_manual');
+  var resumeBtn = document.getElementById('resumeCaptchaBtn');
+  if (resumeBtn) resumeBtn.style.display = status === 'waiting_manual' ? '' : 'none';
+
+  if (status === 'completed') {
+    refreshPreview();
+  }
+}
+
+function pollProgress(){
+  fetch('/api/progress', {headers: {'Authorization': 'Bearer ' + getToken()}})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      renderProgress(d);
+      if (d.status === 'running' || d.status === 'waiting_manual') {
+        pollTimer = setTimeout(pollProgress, 2000);
+      }
+    })
+    .catch(function(){});
+}
+
+function refreshPreview(){
+  fetch('/api/groups', {headers: {'Authorization': 'Bearer ' + getToken()}})
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      var groups = data.groups || [];
+      document.getElementById('groups-found').textContent = groups.length;
+      document.getElementById('preview-count').textContent = Math.min(groups.length, 50);
+      var tbody = document.getElementById('preview-body');
+      tbody.innerHTML = '';
+      groups.slice(0, 50).forEach(function(g){
+        var tr = document.createElement('tr');
+        tr.dataset.name = (g.name || '').toLowerCase();
+        tr.innerHTML =
+          '<td><span class="fw-semibold small">' + (g.name || 'Unknown') + '</span></td>' +
+          '<td>' + (g.members || '—') + '</td>' +
+          '<td>' + (g.language_tag || '—') + '</td>' +
+          '<td>' + (g.country_name || g.country_tag || '—') + '</td>' +
+          '<td>' + (g.url ? '<a href="' + g.url + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary py-0">Open</a>' : '') + '</td>';
+        tbody.appendChild(tr);
+      });
+      var hasRows = groups.length > 0;
+      document.getElementById('preview-empty').classList.toggle('d-none', hasRows);
+      document.getElementById('preview-table-wrap').classList.toggle('d-none', !hasRows);
+    });
+}
+
+function loadFetchAccounts(){
+  fetch('/api/accounts', {headers:{'Authorization':'Bearer '+getToken()}})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var sel = document.getElementById('fetch-account');
+      var line = document.getElementById('fetch-trust-line');
+      var accounts = d.accounts || [];
+      if (!sel) return;
+      if (!accounts.length){
+        sel.innerHTML = '<option value="">— нет аккаунтов —</option>';
+        return;
+      }
+      sel.innerHTML = accounts.map(function(a){
+        return '<option value="'+a.id+'">'+(a.label||a.login_email)+' ['+(a.trust||'unknown')+']</option>';
+      }).join('');
+      var first = accounts[0];
+      if (first && first.login_email) document.getElementById('fetch-email').value = first.login_email;
+      if (line) line.innerHTML = first && first.can_use
+        ? 'Trusted — можно запускать fetch'
+        : 'Нужен Trusted аккаунт. <a href="/accounts">Prepare на Accounts</a>';
+    });
+}
+loadFetchAccounts();
+
+function resumeFetchCaptcha(){
+  var id = document.getElementById('fetch-account').value;
+  if(!id){ alert('Выберите аккаунт'); return; }
+  fetch('/api/accounts/'+id+'/resume-manual', {
+    method:'POST',
+    headers:{'Authorization':'Bearer '+getToken(),'Content-Type':'application/json'},
+    body:'{}'
+  }).then(function(r){ return r.json(); }).then(function(d){
+    renderProgress({status:'waiting_manual', message:d.message||'Resume sent', progress:25});
+    pollProgress();
+  });
+}
+
+function startFetch(){
+  var email = document.getElementById('fetch-email').value.trim();
+  var pwd = document.getElementById('fetch-password').value;
+  var accountId = document.getElementById('fetch-account').value;
+  if (!accountId && (!email || !pwd)) {
+    alert('Выберите Trusted аккаунт или введите email/пароль');
+    return;
+  }
+  setFetchRunning(true);
+  renderProgress({status:'running', step:'Запуск...', progress:1, total_groups:0, elapsed_time:0});
+  fetch('/api/start_fetch', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + getToken()
+    },
+    body: JSON.stringify({
+      username: email,
+      password: pwd,
+      account_id: accountId || null,
+      auto_rotate: true,
+      headless: document.getElementById('headless-mode').checked,
+      use_session: document.getElementById('use-session').checked
+    })
+  })
+  .then(function(r){ return r.json().then(function(d){ return {ok:r.ok, data:d}; }); })
+  .then(function(res){
+    if (!res.ok || res.data.error) {
+      var msg = res.data.error || 'Не удалось запустить поиск';
+      if (res.data.code === 'SESSION_NOT_TRUSTED') msg += ' — откройте /accounts и нажмите Prepare';
+      renderProgress({status:'failed', error: msg});
+      setFetchRunning(false);
+      return;
+    }
+    pollProgress();
+  })
+  .catch(function(err){
+    renderProgress({status:'failed', error: String(err)});
+    setFetchRunning(false);
+  });
+}
+
+function loadSavedCreds(){
+  fetch('/api/credentials/load', {
+    method: 'POST',
+    headers: {'Authorization': 'Bearer ' + getToken()}
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if (d.username) document.getElementById('fetch-email').value = d.username;
+    if (d.has_saved_credentials) alert('A saved password is available. Please re-enter it to start fetching.');
+  });
+}
+
+document.getElementById('preview-filter').addEventListener('input', function(e){
+  var q = (e.target.value || '').toLowerCase();
+  document.querySelectorAll('#preview-body tr').forEach(function(row){
+    row.style.display = !q || (row.dataset.name || '').includes(q) ? '' : 'none';
+  });
+});
+
+if (socket) {
+  socket.on('connect', function(){ socket.emit('request_progress'); });
+  socket.on('progress_update', renderProgress);
+  socket.on('fetch_progress', renderProgress);
+} else {
+  pollProgress();
+}
+</script>
+{% endblock %}

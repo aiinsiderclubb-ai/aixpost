@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: facebook_saas_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - facebook_saas_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: redis-server --appendonly yes
+
+  web:
+    image: python:3.11-slim
+    container_name: facebook_saas_web
+    environment:
+      - FLASK_ENV=production
+      - FERNET_KEY=${FERNET_KEY}
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - JWT_SECRET_KEY=dev-jwt-secret-key
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - facebook_saas_network
+    working_dir: /app
+    command: bash -lc "pip install -r requirements.txt && pip install rq eventlet gunicorn && gunicorn -k eventlet -w 1 run_test_v2:app --bind 0.0.0.0:8080"
+
+  worker:
+    image: python:3.11-slim
+    container_name: facebook_saas_worker
+    environment:
+      - FLASK_ENV=production
+      - FERNET_KEY=${FERNET_KEY}
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - .:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - facebook_saas_network
+    working_dir: /app
+    command: bash -lc "pip install -r requirements.txt && pip install rq && python -u rq_worker.py"
+
+volumes:
+  redis_data:
+    driver: local
+
+networks:
+  facebook_saas_network:
+    driver: bridge
+    name: facebook_saas_network 

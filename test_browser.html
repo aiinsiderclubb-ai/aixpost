@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Authentication - Facebook SaaS</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .section { border: 1px solid #ddd; margin: 10px 0; padding: 15px; border-radius: 5px; }
+        button { background: #007bff; color: white; border: none; padding: 10px 15px; border-radius: 3px; cursor: pointer; margin: 5px; }
+        button:hover { background: #0056b3; }
+        .success { background: #d4edda; border-color: #c3e6cb; color: #155724; }
+        .error { background: #f8d7da; border-color: #f5c6cb; color: #721c24; }
+        .info { background: #d1ecf1; border-color: #bee5eb; color: #0c5460; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        input[type="email"], input[type="password"] { width: 200px; padding: 8px; margin: 5px; border: 1px solid #ddd; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Facebook SaaS Platform - Authentication Test</h1>
+    
+    <div class="section info">
+        <h3>📋 Test Instructions</h3>
+        <p>This page tests the authentication flow of the Facebook SaaS Platform:</p>
+        <ol>
+            <li>First, check if the server is running</li>
+            <li>Login with credentials: <code>admin@test.com</code> / <code>Admin123!</code></li>
+            <li>Test protected endpoints</li>
+            <li>View dashboard and other pages</li>
+        </ol>
+    </div>
+
+    <div class="section">
+        <h3>🔧 Server Status</h3>
+        <button onclick="checkServerHealth()">Check Server Status</button>
+        <div id="healthResult"></div>
+    </div>
+
+    <div class="section">
+        <h3>🔐 Authentication Test</h3>
+        <div>
+            <input type="email" id="email" placeholder="Email" value="admin@test.com">
+            <input type="password" id="password" placeholder="Password" value="Admin123!">
+            <button onclick="testLogin()">Login</button>
+            <button onclick="testLogout()">Logout</button>
+        </div>
+        <div id="authResult"></div>
+    </div>
+
+    <div class="section">
+        <h3>👤 User Info</h3>
+        <button onclick="getCurrentUser()">Get Current User</button>
+        <div id="userResult"></div>
+    </div>
+
+    <div class="section">
+        <h3>📊 Protected Endpoints Test</h3>
+        <button onclick="testDashboard()">Test Dashboard</button>
+        <button onclick="testGroups()">Test Groups</button>
+        <button onclick="testAnalytics()">Test Analytics</button>
+        <button onclick="testCampaigns()">Test Campaigns API</button>
+        <div id="endpointsResult"></div>
+    </div>
+
+    <div class="section">
+        <h3>🌐 Quick Access</h3>
+        <a href="http://localhost:8080" target="_blank">📱 Main App</a> |
+        <a href="http://localhost:8080/dashboard" target="_blank">📊 Dashboard</a> |
+        <a href="http://localhost:8080/analytics" target="_blank">📈 Analytics</a> |
+        <a href="http://localhost:8080/groups" target="_blank">👥 Groups</a>
+    </div>
+
+    <script>
+        const BASE_URL = 'http://localhost:8080';
+
+        function showResult(elementId, content, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<div class="${type}"><pre>${content}</pre></div>`;
+        }
+
+        async function makeRequest(url, options = {}) {
+            try {
+                const response = await fetch(url, {
+                    credentials: 'include', // Include cookies
+                    ...options
+                });
+                const data = await response.text();
+                
+                // Try to parse as JSON, fall back to text
+                try {
+                    return {
+                        status: response.status,
+                        data: JSON.parse(data),
+                        raw: data
+                    };
+                } catch {
+                    return {
+                        status: response.status,
+                        data: data,
+                        raw: data
+                    };
+                }
+            } catch (error) {
+                return {
+                    status: 0,
+                    error: error.message,
+                    data: null
+                };
+            }
+        }
+
+        async function checkServerHealth() {
+            showResult('healthResult', 'Checking server health...', 'info');
+            
+            const result = await makeRequest(`${BASE_URL}/health`);
+            
+            if (result.status === 200) {
+                showResult('healthResult', 
+                    `✅ Server is running!\n\n${JSON.stringify(result.data, null, 2)}`, 
+                    'success'
+                );
+            } else {
+                showResult('healthResult', 
+                    `❌ Server error: ${result.error || result.status}\n\n${result.raw}`, 
+                    'error'
+                );
+            }
+        }
+
+        async function testLogin() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            showResult('authResult', 'Logging in...', 'info');
+            
+            const result = await makeRequest(`${BASE_URL}/api/auth/login`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ email, password })
+            });
+            
+            if (result.status === 200) {
+                showResult('authResult', 
+                    `✅ Login successful!\n\n${JSON.stringify(result.data, null, 2)}`, 
+                    'success'
+                );
+            } else {
+                showResult('authResult', 
+                    `❌ Login failed: ${result.error || result.status}\n\n${result.raw}`, 
+                    'error'
+                );
+            }
+        }
+
+        async function testLogout() {
+            showResult('authResult', 'Logging out...', 'info');
+            
+            const result = await makeRequest(`${BASE_URL}/api/auth/logout`, {
+                method: 'POST'
+            });
+            
+            if (result.status === 200) {
+                showResult('authResult', '✅ Logout successful!', 'success');
+            } else {
+                showResult('authResult', 
+                    `❌ Logout failed: ${result.error || result.status}`, 
+                    'error'
+                );
+            }
+        }
+
+        async function getCurrentUser() {
+            showResult('userResult', 'Getting current user...', 'info');
+            
+            const result = await makeRequest(`${BASE_URL}/api/auth/me`);
+            
+            if (result.status === 200) {
+                showResult('userResult', 
+                    `✅ User authenticated!\n\n${JSON.stringify(result.data, null, 2)}`, 
+                    'success'
+                );
+            } else {
+                showResult('userResult', 
+                    `❌ Not authenticated: ${result.error || result.status}`, 
+                    'error'
+                );
+            }
+        }
+
+        async function testDashboard() {
+            const result = await makeRequest(`${BASE_URL}/dashboard`);
+            updateEndpointsResult('Dashboard', result);
+        }
+
+        async function testGroups() {
+            const result = await makeRequest(`${BASE_URL}/groups`);
+            updateEndpointsResult('Groups', result);
+        }
+
+        async function testAnalytics() {
+            const result = await makeRequest(`${BASE_URL}/analytics`);
+            updateEndpointsResult('Analytics', result);
+        }
+
+        async function testCampaigns() {
+            const result = await makeRequest(`${BASE_URL}/api/campaigns`);
+            updateEndpointsResult('Campaigns API', result);
+        }
+
+        function updateEndpointsResult(endpoint, result) {
+            const existing = document.getElementById('endpointsResult').innerHTML;
+            
+            let status = '';
+            if (result.status === 200) {
+                if (typeof result.data === 'string' && result.data.includes('<!DOCTYPE html>')) {
+                    status = '✅ HTML page loaded';
+                } else {
+                    status = '✅ API response received';
+                }
+            } else if (result.status === 401) {
+                status = '❌ Not authenticated';
+            } else {
+                status = `❌ Error: ${result.status}`;
+            }
+            
+            const newResult = `<div class="${result.status === 200 ? 'success' : 'error'}">
+                <strong>${endpoint}:</strong> ${status}
+            </div>`;
+            
+            document.getElementById('endpointsResult').innerHTML = existing + newResult;
+        }
+
+        // Auto-check server health on load
+        window.onload = function() {
+            checkServerHealth();
+        };
+    </script>
+</body>
+</html> 

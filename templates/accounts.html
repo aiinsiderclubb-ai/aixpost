@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+{% block title %}Accounts — AIPostX{% endblock %}
+{% block page_title %}Facebook Accounts{% endblock %}
+
+{% block content %}
+<p class="small mb-3" style="color:var(--text-muted)">
+  Сначала подготовьте аккаунт (Prepare) — пройдите CAPTCHA/2FA в Chrome. Зелёный Trusted нужен для Fetch и Posting.
+</p>
+
+<div class="card mb-4">
+  <div class="card-body py-3">
+    <div class="d-flex flex-wrap gap-2 align-items-center small">
+      <span class="badge bg-secondary">1. Add account</span>
+      <i class="bi bi-arrow-right" style="color:var(--text-muted)"></i>
+      <span class="badge bg-warning text-dark">2. Prepare (CAPTCHA)</span>
+      <i class="bi bi-arrow-right" style="color:var(--text-muted)"></i>
+      <span class="badge bg-success">3. Trusted</span>
+      <i class="bi bi-arrow-right" style="color:var(--text-muted)"></i>
+      <a href="{{ url_for('group_search_page') }}" class="badge bg-primary text-decoration-none">4. Fetch groups</a>
+      <i class="bi bi-arrow-right" style="color:var(--text-muted)"></i>
+      <a href="{{ url_for('poster_page') }}" class="badge bg-primary text-decoration-none">5. Post</a>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-lg-4">
+    <div class="card h-100">
+      <div class="card-header">Add / update account</div>
+      <div class="card-body">
+        <div class="mb-2">
+          <label class="form-label small">Label</label>
+          <input class="form-control" id="acc-label" placeholder="Main FB">
+        </div>
+        <div class="mb-2">
+          <label class="form-label small">Facebook email</label>
+          <input class="form-control" id="acc-email" type="email" required>
+        </div>
+        <div class="mb-2">
+          <label class="form-label small">Password</label>
+          <input class="form-control" id="acc-password" type="password">
+        </div>
+        <div class="row g-2 mb-2">
+          <div class="col-6">
+            <label class="form-label small">Hourly limit</label>
+            <input class="form-control" id="acc-hourly" type="number" value="15">
+          </div>
+          <div class="col-6">
+            <label class="form-label small">Daily limit</label>
+            <input class="form-control" id="acc-daily" type="number" value="80">
+          </div>
+        </div>
+        <div class="form-check mb-3">
+          <input class="form-check-input" type="checkbox" id="acc-primary">
+          <label class="form-check-label small" for="acc-primary">Primary account</label>
+        </div>
+        <button class="btn btn-primary w-100" onclick="saveAccount()">Save account</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-8">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Live prepare status</span>
+        <span class="badge bg-secondary" id="prepare-pill">idle</span>
+      </div>
+      <div class="card-body">
+        <div class="small mb-2" id="prepare-step" style="color:var(--text-muted)">Ожидание</div>
+        <div class="progress mb-2" style="height:8px">
+          <div class="progress-bar" id="prepare-bar" style="width:0%"></div>
+        </div>
+        <div id="prepare-msg" class="alert alert-info py-2 small d-none"></div>
+        <div id="prepare-err" class="alert alert-danger py-2 small d-none"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header d-flex justify-content-between">
+    <span>Accounts</span>
+    <button class="btn btn-sm btn-outline-secondary" onclick="refreshAccounts()">Refresh</button>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table mb-0">
+        <thead>
+          <tr>
+            <th>Account</th>
+            <th>Trust</th>
+            <th>Health</th>
+            <th>Limits</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="accounts-body">
+        {% for a in accounts %}
+        <tr data-id="{{ a.id }}">
+          <td>
+            <div class="fw-semibold small">{{ a.label or a.login_email }}</div>
+            <div class="small" style="color:var(--text-muted)">{{ a.login_email }}{% if a.is_primary %} · primary{% endif %}</div>
+          </td>
+          <td>
+            {% set t = a.trust or 'unknown' %}
+            {% if t == 'trusted' %}<span class="badge bg-success">Trusted</span>
+            {% elif t == 'needs_verify' %}<span class="badge bg-warning text-dark">Needs verify</span>
+            {% elif t == 'blocked' %}<span class="badge bg-danger">Blocked</span>
+            {% else %}<span class="badge bg-secondary">Unknown</span>{% endif %}
+            <div class="small mt-1" style="color:var(--text-muted)">{{ a.trust_reason or '' }}</div>
+          </td>
+          <td>
+            <span class="small">{{ a.health_score if a.health_score is not none else 100 }}</span>
+            {% if a.cooldown_until %}<div class="small text-danger">cooldown</div>{% endif %}
+          </td>
+          <td class="small">{{ a.posts_last_hour or 0 }}/h · {{ a.posts_last_day or 0 }}/d</td>
+          <td class="d-flex flex-wrap gap-1">
+            <button class="btn btn-sm btn-primary" onclick="prepareAccount({{ a.id }})">Prepare</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="validateAccount({{ a.id }})">Validate</button>
+            <button class="btn btn-sm btn-warning" onclick="resumeManual({{ a.id }})">Я прошёл CAPTCHA</button>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center py-4" style="color:var(--text-muted)">No accounts yet — add one on the left.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function getToken(){ return localStorage.getItem('access_token') || ''; }
+function authHeaders(){ return {'Authorization':'Bearer '+getToken(),'Content-Type':'application/json'}; }
+
+function trustBadge(t){
+  if(t==='trusted') return '<span class="badge bg-success">Trusted</span>';
+  if(t==='needs_verify') return '<span class="badge bg-warning text-dark">Needs verify</span>';
+  if(t==='blocked') return '<span class="badge bg-danger">Blocked</span>';
+  return '<span class="badge bg-secondary">Unknown</span>';
+}
+
+function renderPrepare(d){
+  var status = d.status || 'idle';
+  document.getElementById('prepare-pill').textContent = status === 'waiting_manual' ? 'CAPTCHA' : status;
+  document.getElementById('prepare-pill').className = 'badge ' + (
+    status==='trusted'||status==='completed' ? 'bg-success' :
+    status==='waiting_manual' ? 'bg-warning text-dark' :
+    status==='failed' ? 'bg-danger' : 'bg-secondary'
+  );
+  document.getElementById('prepare-step').textContent = d.message || d.step || 'Ожидание';
+  document.getElementById('prepare-bar').style.width = (d.progress||0)+'%';
+  var msg = document.getElementById('prepare-msg');
+  var err = document.getElementById('prepare-err');
+  if(status==='waiting_manual'){
+    msg.textContent = d.message || 'Пройдите CAPTCHA в Chrome, затем нажмите «Я прошёл CAPTCHA».';
+    msg.classList.remove('d-none');
+  } else { msg.classList.add('d-none'); }
+  if(d.error){ err.textContent=d.error; err.classList.remove('d-none'); }
+  else err.classList.add('d-none');
+}
+
+function refreshAccounts(){
+  fetch('/api/accounts',{headers:authHeaders()}).then(r=>r.json()).then(d=>{
+    if(d.prepare_status) renderPrepare(d.prepare_status);
+    var body = document.getElementById('accounts-body');
+    var rows = d.accounts || [];
+    if(!rows.length){
+      body.innerHTML = '<tr><td colspan="5" class="text-center py-4" style="color:var(--text-muted)">No accounts yet</td></tr>';
+      return;
+    }
+    body.innerHTML = rows.map(a => `
+      <tr data-id="${a.id}">
+        <td><div class="fw-semibold small">${a.label||a.login_email}</div>
+            <div class="small" style="color:var(--text-muted)">${a.login_email}${a.is_primary?' · primary':''}</div></td>
+        <td>${trustBadge(a.trust)}${a.credentials_ok===false?' <span class="badge bg-danger">Password</span>':''}<div class="small mt-1" style="color:var(--text-muted)">${a.trust_reason||''}</div></td>
+        <td><span class="small">${a.health_score ?? 100}</span>${a.cooldown_until?'<div class="small text-danger">cooldown</div>':''}</td>
+        <td class="small">${a.posts_last_hour||0}/h · ${a.posts_last_day||0}/d</td>
+        <td class="d-flex flex-wrap gap-1">
+          <button class="btn btn-sm btn-primary" onclick="prepareAccount(${a.id})">Prepare</button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="validateAccount(${a.id})">Validate</button>
+          <button class="btn btn-sm btn-warning" onclick="resumeManual(${a.id})">Я прошёл CAPTCHA</button>
+        </td>
+      </tr>`).join('');
+  });
+}
+
+function saveAccount(){
+  var payload = {
+    label: document.getElementById('acc-label').value.trim(),
+    login_email: document.getElementById('acc-email').value.trim(),
+    password: document.getElementById('acc-password').value,
+    is_primary: document.getElementById('acc-primary').checked,
+    hourly_limit: parseInt(document.getElementById('acc-hourly').value||'0',10),
+    daily_limit: parseInt(document.getElementById('acc-daily').value||'0',10)
+  };
+  if(!payload.login_email){ alert('Email required'); return; }
+  fetch('/api/accounts',{method:'POST',headers:authHeaders(),body:JSON.stringify(payload)})
+    .then(r=>r.json()).then(d=>{
+      if(d.error) alert(d.error); else { alert('Saved'); refreshAccounts(); }
+    });
+}
+
+function prepareAccount(id){
+  renderPrepare({status:'running',step:'starting',message:'Запуск Prepare...',progress:5});
+  fetch('/api/accounts/'+id+'/prepare',{method:'POST',headers:authHeaders(),body:'{}'})
+    .then(r=>r.json().then(d=>({ok:r.ok,d}))).then(res=>{
+      if(!res.ok){ renderPrepare({status:'failed',error:res.d.error||'Failed'}); return; }
+      pollPrepare();
+    });
+}
+
+function validateAccount(id){
+  fetch('/api/accounts/'+id+'/validate',{method:'POST',headers:authHeaders(),body:'{}'})
+    .then(r=>r.json()).then(d=>{
+      alert(d.trusted ? 'Trusted ✓' : ('Not trusted: '+(d.error||d.status)));
+      refreshAccounts();
+    });
+}
+
+function resumeManual(id){
+  fetch('/api/accounts/'+id+'/resume-manual',{method:'POST',headers:authHeaders(),body:'{}'})
+    .then(r=>r.json()).then(d=>{
+      renderPrepare({status:'waiting_manual',message:d.message||'Resume sent',progress:25});
+      pollPrepare();
+    });
+}
+
+var pollTimer=null;
+function pollPrepare(){
+  if(pollTimer) clearTimeout(pollTimer);
+  fetch('/api/progress',{headers:authHeaders()}).then(r=>r.json()).then(d=>{
+    renderPrepare(d);
+    if(d.status==='running'||d.status==='waiting_manual'){
+      pollTimer=setTimeout(pollPrepare,2000);
+    } else {
+      refreshAccounts();
+    }
+  }).catch(()=>{});
+}
+
+var socket = window.io ? io() : null;
+if(socket){
+  socket.on('prepare_progress', renderPrepare);
+  socket.on('fetch_progress', renderPrepare);
+}
+</script>
+{% endblock %}

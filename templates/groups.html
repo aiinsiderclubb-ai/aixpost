@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% block title %}Groups — AIPostX{% endblock %}
+{% block page_title %}My Facebook Groups{% endblock %}
+{% block page_actions %}
+<span class="badge fs-6 px-3" style="background:var(--accent)">{{ pagination.total }} groups</span>
+{% endblock %}
+
+{% block content %}
+<!-- Search & Filters -->
+<div class="card mb-4">
+  <div class="card-body py-3">
+    <form method="GET" class="d-flex gap-2 flex-wrap align-items-end">
+      <div class="flex-grow-1" style="min-width:200px">
+        <input type="text" name="search" class="form-control" placeholder="Search groups..." value="{{ search }}">
+      </div>
+      <button type="submit" class="btn btn-primary"><i class="bi bi-search me-1"></i>Search</button>
+      {% if search %}<a href="{{ url_for('groups_page') }}" class="btn btn-outline-secondary">Clear</a>{% endif %}
+      <select class="form-select" name="segment" style="max-width:220px">
+        <option value="" {% if not segment %}selected{% endif %}>All segments</option>
+        <option value="german" {% if segment == 'german' %}selected{% endif %}>German</option>
+        <option value="new" {% if segment == 'new' %}selected{% endif %}>New</option>
+        <option value="failed" {% if segment == 'failed' %}selected{% endif %}>Failed</option>
+        <option value="recently_posted" {% if segment == 'recently_posted' %}selected{% endif %}>Recently posted</option>
+        <option value="whitelist" {% if segment == 'whitelist' %}selected{% endif %}>Whitelist</option>
+        <option value="blacklist" {% if segment == 'blacklist' %}selected{% endif %}>Blacklist</option>
+      </select>
+      <select class="form-select" name="countries" style="max-width:220px">
+        <option value="">All countries</option>
+        {% for country, count in country_stats|dictsort(by='value', reverse=true) %}
+        {% if country != 'unknown' %}
+        <option value="{{ country }}" {% if country in selected_countries %}selected{% endif %}>
+          {{ country.replace('_', ' ')|title }} ({{ count }})
+        </option>
+        {% endif %}
+        {% endfor %}
+      </select>
+      <a href="{{ url_for('export_groups', format='csv') }}" class="btn btn-outline-success ms-auto">
+        <i class="bi bi-download me-1"></i>Export CSV
+      </a>
+    </form>
+    <div class="d-flex flex-wrap gap-2 mt-3">
+      <button type="button" class="btn btn-sm btn-outline-primary" onclick="saveCurrentFilter()">Save current filter</button>
+      {% for filt in saved_filters or [] %}
+      <button type="button" class="btn btn-sm btn-outline-secondary" onclick='applySavedFilter({{ filt.config|tojson|safe }})'>{{ filt.name }}</button>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{% if groups %}
+<!-- Groups Grid -->
+<div class="row g-3 mb-4">
+  {% for group in groups %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100" style="transition:all .25s">
+      <div class="card-body p-3">
+        <div class="d-flex align-items-start gap-3">
+          <div style="width:44px;height:44px;background:linear-gradient(135deg,rgba(99,102,241,.15),rgba(168,85,247,.1));border-radius:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+            <i class="bi bi-people-fill" style="color:var(--accent-light);font-size:1.1rem"></i>
+          </div>
+          <div class="overflow-hidden flex-grow-1">
+            <div class="fw-semibold text-truncate" style="font-size:.9rem">{{ group.name }}</div>
+            {% if group.url %}
+            <a href="{{ group.url }}" target="_blank" class="small text-truncate d-block" style="font-size:.73rem;color:var(--text-muted);text-decoration:none">
+              <i class="bi bi-link-45deg"></i>{{ group.url[:50] }}...
+            </a>
+            {% endif %}
+            <div class="d-flex gap-2 mt-2 flex-wrap">
+              {% if group.country_name and group.country_tag != 'unknown' %}
+              <span class="badge" style="background:rgba(16,185,129,.12);color:#059669;font-size:.67rem">
+                {{ group.country_flag or '' }} {{ group.country_name }}
+              </span>
+              {% endif %}
+              {% if group.language_tag and group.language_tag != 'unknown' %}
+              <span class="badge" style="background:var(--border-light);color:var(--text-secondary);font-size:.67rem">{{ group.language_tag }}</span>
+              {% endif %}
+              {% if group.is_whitelisted %}
+              <span class="badge bg-success-subtle text-success-emphasis" style="font-size:.67rem">Whitelist</span>
+              {% endif %}
+              {% if group.is_blacklisted %}
+              <span class="badge bg-danger-subtle text-danger-emphasis" style="font-size:.67rem">Blacklist</span>
+              {% endif %}
+              {% if group.last_post_status %}
+              <span class="badge" style="background:rgba(6,182,212,.12);color:#0891b2;font-size:.67rem">
+                Last {{ group.last_post_status }}
+              </span>
+              {% endif %}
+              {% if group.members %}
+              <span class="badge" style="background:rgba(99,102,241,.12);color:var(--accent-light);font-size:.67rem">
+                <i class="bi bi-people-fill me-1"></i>{{ group.members }}
+              </span>
+              {% endif %}
+            </div>
+            {% if group.last_posted_at %}
+            <div class="small mt-2" style="font-size:.72rem;color:var(--text-muted)">
+              Recent campaign: {{ group.last_campaign_name or 'manual run' }} · {{ group.last_posted_at[:16].replace('T', ' ') }}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+        {% if group.url %}
+        <div class="d-flex gap-2 mt-3">
+          <button class="btn btn-sm btn-outline-success" onclick='updateGroupWorkspace({{ group.url|tojson|safe }}, {{ group.name|tojson|safe }}, false, true)'>Whitelist</button>
+          <button class="btn btn-sm btn-outline-danger" onclick='updateGroupWorkspace({{ group.url|tojson|safe }}, {{ group.name|tojson|safe }}, true, false)'>Blacklist</button>
+          <button class="btn btn-sm btn-outline-secondary" onclick='updateGroupWorkspace({{ group.url|tojson|safe }}, {{ group.name|tojson|safe }}, false, false)'>Clear flags</button>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Pagination -->
+{% if pagination.pages > 1 %}
+<nav>
+  <ul class="pagination pagination-sm justify-content-center">
+    {% if pagination.has_prev %}
+    <li class="page-item">
+      <a class="page-link" href="?page={{ pagination.page-1 }}&search={{ search }}" style="background:var(--bg-card);border-color:var(--border);color:var(--text-secondary)">
+        <i class="bi bi-chevron-left"></i>
+      </a>
+    </li>
+    {% endif %}
+    {% for p in range(1, pagination.pages+1) %}
+      {% if p == pagination.page %}
+      <li class="page-item active"><span class="page-link" style="background:var(--accent);border-color:var(--accent)">{{ p }}</span></li>
+      {% elif p <= 3 or p >= pagination.pages-2 or (p >= pagination.page-1 and p <= pagination.page+1) %}
+      <li class="page-item">
+        <a class="page-link" href="?page={{ p }}&search={{ search }}" style="background:var(--bg-card);border-color:var(--border);color:var(--text-secondary)">{{ p }}</a>
+      </li>
+      {% elif p == 4 and pagination.page > 5 %}
+      <li class="page-item disabled"><span class="page-link" style="background:var(--bg-card);border-color:var(--border);color:var(--text-muted)">...</span></li>
+      {% endif %}
+    {% endfor %}
+    {% if pagination.has_next %}
+    <li class="page-item">
+      <a class="page-link" href="?page={{ pagination.page+1 }}&search={{ search }}" style="background:var(--bg-card);border-color:var(--border);color:var(--text-secondary)">
+        <i class="bi bi-chevron-right"></i>
+      </a>
+    </li>
+    {% endif %}
+  </ul>
+</nav>
+{% endif %}
+
+{% else %}
+<div class="text-center py-5">
+  <div style="width:72px;height:72px;background:rgba(99,102,241,.08);border-radius:20px;display:inline-flex;align-items:center;justify-content:center;margin-bottom:16px">
+    <i class="bi bi-people" style="font-size:2rem;color:var(--text-muted)"></i>
+  </div>
+  <h5 class="mt-2" style="color:var(--text-secondary)">No groups found</h5>
+  {% if search %}
+  <p class="small" style="color:var(--text-muted)">No results for "<strong>{{ search }}</strong>"</p>
+  <a href="{{ url_for('groups_page') }}" class="btn btn-outline-primary btn-sm mt-2">Clear search</a>
+  {% else %}
+  <p class="small" style="color:var(--text-muted)">Fetch your Facebook groups from the search page.</p>
+  <a href="{{ url_for('group_search_page') }}" class="btn btn-primary btn-sm mt-2">
+    <i class="bi bi-search me-1"></i>Find Groups
+  </a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function saveCurrentFilter(){
+  var params = new URLSearchParams(window.location.search);
+  var name = prompt('Filter name');
+  if(!name) return;
+  fetch('/api/groups/filters', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      name: name,
+      config: {
+        search: params.get('search') || '',
+        segment: params.get('segment') || '',
+        languages: params.getAll('languages'),
+        countries: params.getAll('countries')
+      }
+    })
+  }).then(r=>r.json()).then(d=>{
+    alert(d.message || d.error || 'Saved');
+    if(!d.error) location.reload();
+  });
+}
+
+function applySavedFilter(config){
+  var params = new URLSearchParams();
+  if(config.search) params.set('search', config.search);
+  if(config.segment) params.set('segment', config.segment);
+  (config.languages || []).forEach(v=>params.append('languages', v));
+  (config.countries || []).forEach(v=>params.append('countries', v));
+  window.location.href = '/groups?' + params.toString();
+}
+
+function updateGroupWorkspace(groupUrl, groupName, blacklist, whitelist){
+  fetch('/api/groups/workspace', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      group_url: groupUrl,
+      group_name: groupName,
+      is_blacklisted: blacklist,
+      is_whitelisted: whitelist
+    })
+  }).then(r=>r.json()).then(d=>{
+    alert(d.message || d.error || 'Updated');
+    if(!d.error) location.reload();
+  });
+}
+</script>
+{% endblock %}

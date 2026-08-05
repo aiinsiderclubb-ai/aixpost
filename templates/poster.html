@@ -1,0 +1,976 @@
+{% extends "base.html" %}
+{% block title %}Post to Groups — AIPostX{% endblock %}
+{% block page_title %}Post to Groups{% endblock %}
+
+{% block head %}
+<style>
+/* ─── Poster layout ─── */
+.poster-grid{display:grid;grid-template-columns:420px 1fr;gap:24px;align-items:start}
+@media(max-width:1100px){.poster-grid{grid-template-columns:1fr}}
+
+/* ─── Compose panel ─── */
+.compose-panel{position:sticky;top:88px}
+.compose-textarea{
+  width:100%;min-height:160px;resize:vertical;
+  background:var(--card-inner-bg,rgba(248,250,252,.8));
+  border:1.5px solid var(--color-border,#e5e7eb);
+  border-radius:var(--radius-md,10px);
+  padding:14px;font-size:.92rem;line-height:1.6;
+  color:var(--color-text,#111827);transition:border-color .2s,box-shadow .2s;
+  font-family:var(--font-sans);
+}
+.compose-textarea:focus{
+  outline:none;
+  border-color:var(--color-primary,#6366f1);
+  box-shadow:0 0 0 4px var(--color-primary-light,rgba(99,102,241,.1));
+}
+.char-meter{height:4px;border-radius:99px;background:var(--color-border,#e5e7eb);margin-top:6px;overflow:hidden}
+.char-meter-fill{height:100%;border-radius:99px;background:var(--color-primary,#6366f1);transition:width .3s,background .3s}
+
+/* ─── Input row (email + password) ─── */
+.input-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:540px){.input-row{grid-template-columns:1fr}}
+
+.field-label{font-size:.78rem;font-weight:600;color:var(--color-text-secondary,#374151);margin-bottom:4px;display:block}
+.field-input{
+  width:100%;padding:10px 14px;border-radius:var(--radius-md,10px);
+  border:1.5px solid var(--color-border,#e5e7eb);
+  background:var(--card-inner-bg,rgba(248,250,252,.8));
+  color:var(--color-text,#111827);font-size:.875rem;
+  transition:border-color .2s,box-shadow .2s;font-family:var(--font-sans);
+}
+.field-input:focus{
+  outline:none;border-color:var(--color-primary,#6366f1);
+  box-shadow:0 0 0 4px var(--color-primary-light,rgba(99,102,241,.1));
+}
+.field-input::placeholder{color:var(--color-text-tertiary,#6b7280)}
+
+/* ─── Template quick-pick ─── */
+.tpl-chip{
+  display:inline-flex;align-items:center;gap:6px;padding:6px 12px;
+  border-radius:99px;border:1.5px solid var(--color-border,#e5e7eb);
+  background:var(--color-card,#fff);font-size:.8rem;cursor:pointer;
+  transition:all .18s;color:var(--color-text-secondary,#374151);
+  white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis;
+}
+.tpl-chip:hover{border-color:var(--color-primary,#6366f1);color:var(--color-primary,#6366f1);background:var(--color-primary-light,rgba(99,102,241,.08))}
+
+/* ─── Status card ─── */
+.status-hidden{display:none}
+.stat-pill{
+  display:flex;flex-direction:column;align-items:center;
+  padding:12px 16px;border-radius:var(--radius-md,10px);
+  background:var(--card-inner-bg,rgba(248,250,252,.8));
+  border:1.5px solid var(--color-border,#e5e7eb);
+}
+.stat-pill-val{font-size:1.6rem;font-weight:700;line-height:1}
+.stat-pill-lbl{font-size:.72rem;color:var(--color-text-tertiary,#6b7280);margin-top:4px;font-weight:500}
+.posting-progress{height:10px;border-radius:99px;overflow:hidden;background:var(--color-border,#e5e7eb)}
+.posting-progress-bar{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--color-primary,#6366f1),var(--color-success,#10b981));transition:width .6s}
+
+/* ─── Groups panel ─── */
+.groups-header{
+  display:flex;align-items:center;flex-wrap:wrap;gap:10px;
+  padding:16px 18px;border-bottom:1px solid var(--color-border,#e5e7eb);
+}
+.groups-header-title{font-weight:700;font-size:1rem;color:var(--color-text,#111827)}
+.groups-count{
+  font-size:.8rem;font-weight:600;padding:4px 12px;
+  border-radius:99px;background:var(--color-primary-light,rgba(99,102,241,.1));
+  color:var(--color-primary,#6366f1);
+}
+.groups-actions{display:flex;gap:6px;margin-left:auto}
+.filter-summary{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:0 18px 12px;font-size:.78rem;color:var(--color-text-tertiary,#6b7280)
+}
+.template-posting-box{
+  border:1.5px solid var(--color-border,#e5e7eb);
+  border-radius:var(--radius-md,10px);
+  background:var(--card-inner-bg,rgba(248,250,252,.72));
+  padding:12px 14px;
+}
+.template-mode-select{
+  width:100%;padding:10px 12px;border-radius:var(--radius-md,10px);
+  border:1.5px solid var(--color-border,#e5e7eb);
+  background:var(--card-inner-bg,rgba(248,250,252,.8));color:var(--color-text,#111827);
+  font-size:.86rem;font-family:var(--font-sans);
+}
+.template-mode-select:focus{outline:none;border-color:var(--color-primary,#6366f1);box-shadow:0 0 0 4px var(--color-primary-light,rgba(99,102,241,.1))}
+.template-mode-help{margin-top:8px;font-size:.74rem;color:var(--color-text-tertiary,#6b7280);line-height:1.5}
+.template-status-pill{
+  display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;
+  background:rgba(99,102,241,.1);color:var(--color-primary,#6366f1);font-size:.74rem;font-weight:600
+}
+
+.groups-filter-bar{padding:14px 18px 0;display:flex;gap:10px;flex-direction:column}
+.filter-select-row{display:grid;grid-template-columns:1fr 220px;gap:10px}
+@media(max-width:760px){.filter-select-row{grid-template-columns:1fr}}
+.search-wrap{position:relative}
+.search-wrap i{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--color-text-tertiary,#6b7280);pointer-events:none}
+.search-input{
+  width:100%;padding:9px 12px 9px 36px;border-radius:var(--radius-md,10px);
+  border:1.5px solid var(--color-border,#e5e7eb);
+  background:var(--card-inner-bg,rgba(248,250,252,.8));
+  color:var(--color-text,#111827);font-size:.875rem;
+  transition:border-color .2s,box-shadow .2s;font-family:var(--font-sans);
+}
+.search-input:focus{
+  outline:none;border-color:var(--color-primary,#6366f1);
+  box-shadow:0 0 0 4px var(--color-primary-light,rgba(99,102,241,.1));
+}
+
+.lang-chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 18px 14px}
+.lang-chip{
+  display:inline-flex;align-items:center;gap:5px;padding:5px 12px;
+  border-radius:99px;border:1.5px solid var(--color-border,#e5e7eb);
+  background:transparent;font-size:.78rem;font-weight:600;cursor:pointer;
+  color:var(--color-text-secondary,#374151);transition:all .18s;white-space:nowrap;
+}
+.lang-chip:hover{border-color:var(--color-primary,#6366f1);color:var(--color-primary,#6366f1)}
+.lang-chip.active{
+  background:var(--color-primary,#6366f1);border-color:var(--color-primary,#6366f1);
+  color:#fff;
+}
+.lang-chip-dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0}
+.lang-chip[data-language="all"] .lang-chip-dot{display:none}
+
+/* ─── Group rows ─── */
+.groups-list{height:500px;overflow-y:auto;padding:4px 0}
+.group-row{
+  display:flex;align-items:center;gap:12px;padding:10px 18px;
+  border-bottom:1px solid var(--color-border,#e5e7eb);
+  cursor:pointer;transition:background .15s;
+}
+.group-row:last-child{border-bottom:none}
+.group-row:hover{background:var(--hover-color,rgba(0,0,0,.03))}
+.group-row.selected-row{background:var(--color-primary-light,rgba(99,102,241,.07))}
+.group-icon{
+  width:38px;height:38px;border-radius:10px;flex-shrink:0;
+  background:var(--color-primary-light,rgba(99,102,241,.1));
+  color:var(--color-primary,#6366f1);
+  display:flex;align-items:center;justify-content:center;font-size:.95rem;
+}
+.group-info{flex:1;min-width:0}
+.group-name{font-size:.88rem;font-weight:600;color:var(--color-text,#111827);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.group-url{font-size:.72rem;color:var(--color-text-tertiary,#6b7280);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.group-lang-badge{
+  font-size:.68rem;font-weight:600;padding:2px 8px;border-radius:99px;
+  background:rgba(99,102,241,.1);color:var(--color-primary,#6366f1);flex-shrink:0;
+}
+.group-cb{width:18px;height:18px;cursor:pointer;flex-shrink:0;accent-color:var(--color-primary,#6366f1)}
+.monitor-split{display:grid;grid-template-columns:1fr;gap:12px;margin-top:14px}
+.monitor-log,.monitor-table{
+  border:1.5px solid var(--color-border,#e5e7eb);
+  border-radius:var(--radius-md,10px);
+  background:var(--card-inner-bg,rgba(248,250,252,.8));
+}
+.monitor-log{max-height:220px;overflow:auto;padding:10px 12px}
+.monitor-event{font-size:.76rem;line-height:1.5;padding:6px 0;border-bottom:1px solid rgba(148,163,184,.15)}
+.monitor-event:last-child{border-bottom:none}
+.monitor-event small{color:var(--color-text-tertiary,#6b7280);display:block}
+.monitor-event.error{color:var(--color-danger,#ef4444)}
+.monitor-event.warning{color:var(--color-warning,#f59e0b)}
+.monitor-table-wrap{max-height:280px;overflow:auto}
+.monitor-table table{width:100%;font-size:.78rem}
+.monitor-table th,.monitor-table td{padding:10px 12px;border-bottom:1px solid rgba(148,163,184,.15);vertical-align:top}
+.monitor-table th{position:sticky;top:0;background:var(--card-inner-bg,rgba(248,250,252,.95));z-index:1}
+.monitor-status-badge{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border-radius:999px;font-size:.7rem;font-weight:700}
+.monitor-status-pending{background:rgba(99,102,241,.12);color:#6366f1}
+.monitor-status-processing{background:rgba(6,182,212,.12);color:#0891b2}
+.monitor-status-success{background:rgba(16,185,129,.12);color:#10b981}
+.monitor-status-failed{background:rgba(239,68,68,.12);color:#ef4444}
+.monitor-status-skipped{background:rgba(245,158,11,.12);color:#f59e0b}
+
+.no-groups{display:flex;flex-direction:column;align-items:center;justify-content:center;height:200px;color:var(--color-text-tertiary,#6b7280)}
+.no-groups i{font-size:2.5rem;margin-bottom:12px;opacity:.4}
+.no-groups-msg{font-size:.9rem;font-weight:500}
+
+/* ─── Dark theme overrides ─── */
+.dark-theme .compose-textarea,.dark-theme .field-input,.dark-theme .search-input{
+  background:rgba(30,41,59,.7);border-color:#374151;color:#f9fafb;
+}
+.dark-theme .tpl-chip{background:rgba(30,41,59,.7);border-color:#374151;color:#e5e7eb}
+.dark-theme .stat-pill{background:rgba(30,41,59,.7);border-color:#374151}
+.dark-theme .lang-chip{border-color:#374151;color:#d1d5db}
+.dark-theme .groups-header,.dark-theme .groups-filter-bar,.dark-theme .group-row{border-color:#374151}
+.dark-theme .group-row:hover{background:rgba(255,255,255,.04)}
+.dark-theme .group-row.selected-row{background:rgba(99,102,241,.1)}
+.dark-theme .posting-progress{background:#374151}
+.dark-theme .char-meter{background:#374151}
+.dark-theme .template-posting-box,.dark-theme .template-mode-select{background:rgba(30,41,59,.7);border-color:#374151;color:#f9fafb}
+.dark-theme .monitor-log,.dark-theme .monitor-table{background:rgba(30,41,59,.7);border-color:#374151}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="poster-grid">
+
+  <!-- ═══ LEFT: COMPOSE ═══ -->
+  <div class="compose-panel">
+
+    <!-- Credentials -->
+    <div class="card mb-4">
+      <div class="card-header" style="padding:16px 18px">
+        <h6 class="mb-0" style="font-weight:700">
+          <i class="bi bi-lock-fill me-2" style="color:var(--color-primary,#6366f1)"></i>Facebook Account
+        </h6>
+      </div>
+      <div class="card-body" style="padding:18px">
+        <div style="margin-bottom:14px">
+          <label class="field-label">Saved account</label>
+          <select class="field-input" id="account-select" onchange="onAccountChanged()"></select>
+          <div id="account-status-line" style="font-size:.74rem;color:var(--color-text-tertiary,#6b7280);margin-top:6px">Loading accounts...</div>
+          <div id="account-trust-badge" class="mt-2"></div>
+          <div class="d-flex flex-wrap gap-2 mt-2">
+            <a href="/accounts" class="btn btn-sm btn-outline-primary">Prepare on Accounts</a>
+            <button type="button" class="btn btn-sm btn-warning" id="btn-resume-captcha" style="display:none" onclick="resumeCaptchaFromPoster()">Я прошёл CAPTCHA</button>
+          </div>
+        </div>
+        <div class="input-row">
+          <div>
+            <label class="field-label">Email / Phone</label>
+            <input class="field-input" type="email" id="post-email" placeholder="your@email.com">
+          </div>
+          <div>
+            <label class="field-label">Password</label>
+            <input class="field-input" type="password" id="post-pwd" placeholder="••••••••">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Compose -->
+    <div class="card mb-4">
+      <div class="card-header" style="padding:16px 18px;display:flex;align-items:center;justify-content:space-between">
+        <h6 class="mb-0" style="font-weight:700">
+          <i class="bi bi-pencil-fill me-2" style="color:var(--color-primary,#6366f1)"></i>Message
+        </h6>
+        <span id="msg-len" style="font-size:.78rem;color:var(--color-text-tertiary,#6b7280)">0 / 8000</span>
+      </div>
+      <div class="card-body" style="padding:14px 18px">
+        <!-- Template quick-pick -->
+        <div id="tpl-quickpick" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
+          <span style="font-size:.75rem;color:var(--color-text-tertiary,#6b7280);align-self:center;flex-shrink:0">Templates:</span>
+          <span style="font-size:.78rem;color:var(--color-text-tertiary,#6b7280);font-style:italic" id="tpl-loading">loading...</span>
+        </div>
+
+        <textarea class="compose-textarea" id="post-message" placeholder="Write your post here...&#10;&#10;Use {variable} for dynamic content.&#10;Emoji ✅ and line breaks are fully supported." oninput="onMsgInput()"></textarea>
+        <div class="char-meter"><div class="char-meter-fill" id="char-fill" style="width:0%"></div></div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px">
+          <span id="msg-warn" style="font-size:.75rem;color:var(--color-danger,#ef4444)"></span>
+          <span style="font-size:.72rem;color:var(--color-text-tertiary,#6b7280)" id="msg-visible">Visible to groups</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div class="card mb-4">
+      <div class="card-header" style="padding:16px 18px">
+        <h6 class="mb-0" style="font-weight:700">
+          <i class="bi bi-gear-fill me-2" style="color:var(--color-warning,#f59e0b)"></i>Settings
+        </h6>
+      </div>
+      <div class="card-body" style="padding:18px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+          <div>
+            <label class="field-label">Campaign name</label>
+            <input class="field-input" type="text" id="campaign-name" placeholder="Spring launch batch">
+          </div>
+          <div>
+            <label class="field-label">Max groups to post</label>
+            <input class="field-input" type="number" id="post-max" value="20" min="1" max="500">
+          </div>
+          <div style="display:flex;flex-direction:column;justify-content:flex-end;grid-column:1 / -1">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">
+              <input type="checkbox" id="post-headless" checked style="width:16px;height:16px;accent-color:var(--color-primary,#6366f1)">
+              <span class="field-label" style="margin:0">Headless mode</span>
+            </label>
+            <span style="font-size:.72rem;color:var(--color-text-tertiary,#6b7280);margin-top:3px">Chrome runs in background</span>
+          </div>
+        </div>
+
+        <div class="template-posting-box mb-3">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;margin:0">
+              <input type="checkbox" id="post-use-templates" style="width:16px;height:16px;accent-color:var(--color-primary,#6366f1)" onchange="onTemplatePostingToggle()">
+              <span class="field-label" style="margin:0">Use saved templates for posting</span>
+            </label>
+            <span class="template-status-pill" id="tpl-posting-summary">Loading templates...</span>
+          </div>
+
+          <div style="margin-top:12px">
+            <label class="field-label">How to rotate templates</label>
+            <select class="template-mode-select" id="post-template-mode" onchange="onTemplatePostingToggle()">
+              <option value="random">Random for each group</option>
+              <option value="sequential">Sequential 1 → 2 → 3 → repeat</option>
+              <option value="shuffle_cycle">Use all templates in shuffled cycle</option>
+              <option value="reverse">Reverse order N → 1 → repeat</option>
+            </select>
+            <div class="template-mode-help" id="template-mode-help">
+              Enable this to post with all your saved templates instead of one manual message.
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-outline-primary" style="padding:12px 16px" onclick="saveCampaign()">
+            <i class="bi bi-bookmark-plus me-2"></i>Save Campaign
+          </button>
+          <button class="btn btn-primary" style="flex:1;font-weight:700;padding:12px" id="btn-post" onclick="startPosting()">
+            <i class="bi bi-send-fill me-2"></i>Start Posting
+          </button>
+          <button class="btn btn-danger" id="btn-stop" onclick="stopPosting()" style="display:none;padding:12px 16px">
+            <i class="bi bi-stop-fill"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status (hidden until posting) -->
+    <div class="card status-hidden" id="status-card">
+      <div class="card-header" style="padding:16px 18px;display:flex;align-items:center;gap:8px">
+        <span id="status-dot" style="width:10px;height:10px;border-radius:50%;background:#6b7280;flex-shrink:0;transition:background .3s"></span>
+        <h6 class="mb-0" style="font-weight:700">Posting Status</h6>
+        <span id="status-label" style="font-size:.8rem;color:var(--color-text-tertiary,#6b7280);margin-left:4px">Idle</span>
+      </div>
+      <div class="card-body" style="padding:18px">
+        <div style="margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:6px">
+            <span style="color:var(--color-text-secondary,#374151);font-weight:500">Progress</span>
+            <span id="post-progress-text" style="font-weight:600">0 / 0</span>
+          </div>
+          <div class="posting-progress"><div class="posting-progress-bar" id="post-progress-bar" style="width:0%"></div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
+          <div class="stat-pill">
+            <div class="stat-pill-val" id="posts-ok" style="color:var(--color-success,#10b981)">0</div>
+            <div class="stat-pill-lbl">Posted</div>
+          </div>
+          <div class="stat-pill">
+            <div class="stat-pill-val" id="posts-fail" style="color:var(--color-danger,#ef4444)">0</div>
+            <div class="stat-pill-lbl">Failed</div>
+          </div>
+          <div class="stat-pill">
+            <div class="stat-pill-val" id="posts-time" style="color:var(--color-primary,#6366f1)">0s</div>
+            <div class="stat-pill-lbl">Time</div>
+          </div>
+        </div>
+        <div id="post-current-group" style="font-size:.78rem;color:var(--color-text-tertiary,#6b7280);min-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+          <button class="btn btn-secondary btn-sm" id="btn-pause" onclick="pausePosting()" style="display:none">Pause</button>
+          <button class="btn btn-secondary btn-sm" id="btn-resume" onclick="resumePosting()" style="display:none">Resume</button>
+          <button class="btn btn-outline-primary btn-sm" id="btn-retry-failed" onclick="retryFailed()" style="display:none">Retry failed</button>
+        </div>
+        <div class="monitor-split">
+          <div class="monitor-log" id="runtime-log">
+            <div class="monitor-event"><small>Runtime log</small>Waiting for task events...</div>
+          </div>
+          <div class="monitor-table">
+            <div class="monitor-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Group</th>
+                    <th>Status</th>
+                    <th>Error</th>
+                  </tr>
+                </thead>
+                <tbody id="group-status-body">
+                  <tr><td colspan="3" style="color:var(--color-text-tertiary,#6b7280)">No live group statuses yet.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══ RIGHT: GROUPS ═══ -->
+  <div class="card" style="padding:0;overflow:hidden">
+
+    <div class="groups-header">
+      <div class="groups-header-title">
+        <i class="bi bi-people-fill me-2" style="color:var(--color-success,#10b981)"></i>Select Groups
+      </div>
+      <span class="groups-count" id="selected-count">0 selected</span>
+      <span style="font-size:.78rem;color:var(--color-text-tertiary,#6b7280)" id="visible-count"></span>
+      <div class="groups-actions">
+        <button class="btn btn-primary btn-sm" id="select-filtered-btn" onclick="selectFiltered()">Select filtered</button>
+        <button class="btn btn-secondary btn-sm" onclick="selectAll()">All visible</button>
+        <button class="btn btn-secondary btn-sm" onclick="selectNone()">None</button>
+        <button class="btn btn-danger btn-sm" onclick="selectNone()">Clear</button>
+      </div>
+    </div>
+
+    <div class="groups-filter-bar">
+      <div class="filter-select-row">
+        <div class="search-wrap">
+          <i class="bi bi-search" style="font-size:.85rem"></i>
+          <input class="search-input" type="text" id="g-search" placeholder="Search by name or URL..." oninput="applyFilters()">
+        </div>
+        <select class="search-input" id="g-country" onchange="applyFilters()" style="padding-left:12px">
+          <option value="">All countries</option>
+          {% for country, count in country_stats|dictsort(by='value', reverse=true) %}
+          {% if country != 'unknown' %}
+          <option value="{{ country|lower }}">{{ country.replace('_', ' ')|title }} ({{ count }})</option>
+          {% endif %}
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    {% if language_stats %}
+    <div class="lang-chips">
+      <button type="button" class="lang-chip active" data-language="all" onclick="toggleLang('all',this)">
+        <span class="lang-chip-dot"></span>All
+        <span style="opacity:.6;font-size:.7rem">({{ groups|length }})</span>
+      </button>
+      {% set lang_colors = ['#6366f1','#10b981','#f59e0b','#ef4444','#06b6d4','#8b5cf6','#ec4899','#84cc16','#f97316','#14b8a6'] %}
+      {% for lang, count in language_stats|dictsort(by='value', reverse=true) %}
+      {% set color_idx = loop.index0 % 10 %}
+      <button type="button" class="lang-chip" data-language="{{ lang|lower }}" onclick="toggleLang('{{ lang|lower }}',this)">
+        <span class="lang-chip-dot"></span>
+        {{ lang|upper if lang != 'unknown' else '??' }}
+        <span style="opacity:.65;font-size:.7rem">({{ count }})</span>
+      </button>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="filter-summary">
+      <span id="filter-summary-text">Showing all groups</span>
+      <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" onclick="selectFiltered()">Select only filtered results</button>
+    </div>
+
+    <div class="groups-list" id="groups-list">
+      {% if groups %}
+        {% for g in groups %}
+        <div class="group-row" onclick="toggleRow(this)"
+             data-name="{{ g.name|lower }} {{ (g.url or '')|lower }}"
+             data-language="{{ g.language_tag|default('unknown')|lower }}"
+             data-country="{{ g.country_tag|default('unknown')|lower }}"
+             data-url="{{ g.url or g.name }}">
+          <input type="checkbox" class="group-cb" onclick="event.stopPropagation()" onchange="rowChecked(this)">
+          <div class="group-icon"><i class="bi bi-people-fill"></i></div>
+          <div class="group-info">
+            <div class="group-name">{{ g.name }}</div>
+            {% if g.url %}
+            <div class="group-url">{{ g.url }}</div>
+            {% endif %}
+          </div>
+          {% if g.country_tag and g.country_tag != 'unknown' %}
+          <span class="group-lang-badge" style="background:rgba(16,185,129,.12);color:#059669">{{ g.country_flag or '' }} {{ g.country_name }}</span>
+          {% endif %}
+          {% if g.language_tag and g.language_tag != 'unknown' %}
+          <span class="group-lang-badge">{{ g.language_tag|upper }}</span>
+          {% endif %}
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="no-groups">
+          <i class="bi bi-people"></i>
+          <div class="no-groups-msg">No groups yet</div>
+          <div style="font-size:.82rem;margin-top:6px">
+            <a href="{{ url_for('dashboard') }}" style="color:var(--color-primary,#6366f1)">Fetch from Dashboard →</a>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+
+    <div style="padding:12px 18px;border-top:1px solid var(--color-border,#e5e7eb);display:flex;align-items:center;gap:10px">
+      <i class="bi bi-info-circle" style="color:var(--color-text-tertiary,#6b7280);font-size:.85rem"></i>
+      <span style="font-size:.78rem;color:var(--color-text-tertiary,#6b7280)">
+        Click a row to toggle, or use checkboxes. Language filter is <strong>multi-select</strong>.
+      </span>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var socket = window.io ? io() : null;
+var activeLangs = new Set(['all']);
+var activeTaskId = null;
+var loadedAccounts = [];
+
+/* ─── Socket events ─── */
+if (socket) {
+  socket.on('posting_completed', function(d){
+    setBtnState(false);
+    showToast(d.success ? '✅ Posting completed!' : '⚠️ Finished with some errors', d.success ? 'success' : 'warning');
+    pollStatus();
+  });
+  socket.on('posting_error', function(d){ showToast('❌ Error: ' + d.error, 'danger'); });
+}
+
+function escHtml(value){
+  return String(value || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+}
+
+function trustLabel(t){
+  if(t==='trusted') return '<span class="badge bg-success">Trusted</span>';
+  if(t==='needs_verify') return '<span class="badge bg-warning text-dark">Needs verify</span>';
+  if(t==='blocked') return '<span class="badge bg-danger">Blocked</span>';
+  return '<span class="badge bg-secondary">Unknown</span>';
+}
+function onAccountChanged(){
+  var id = document.getElementById('account-select').value;
+  var acc = loadedAccounts.find(function(a){ return String(a.id)===String(id); });
+  var badge = document.getElementById('account-trust-badge');
+  var line = document.getElementById('account-status-line');
+  var startBtn = document.getElementById('btn-start') || document.querySelector('[onclick*="startPosting"]');
+  if(!acc){
+    if(badge) badge.innerHTML = '';
+    return;
+  }
+  if(acc.login_email) document.getElementById('post-email').value = acc.login_email;
+  if(badge) badge.innerHTML = trustLabel(acc.trust) + ' <span class="small ms-1" style="color:var(--color-text-tertiary)">'+(acc.trust_reason||'')+'</span>';
+  if(line) line.textContent = acc.can_use ? 'Ready to post' : 'Prepare this account before posting';
+  if(startBtn) startBtn.disabled = !acc.can_use && loadedAccounts.length > 0;
+}
+function resumeCaptchaFromPoster(){
+  var id = document.getElementById('account-select').value;
+  if(!id){ alert('Select account first'); return; }
+  fetch('/api/accounts/'+id+'/resume-manual',{method:'POST',headers:{'Content-Type':'application/json'}})
+    .then(r=>r.json()).then(d=>alert(d.message||d.error||'Sent'));
+}
+function loadAccounts(){
+  fetch('/api/accounts').then(r=>r.json()).then(d=>{
+    loadedAccounts = d.accounts || [];
+    var select = document.getElementById('account-select');
+    var line = document.getElementById('account-status-line');
+    if(!select) return;
+    if(!loadedAccounts.length){
+      select.innerHTML = '<option value="">Primary account from form</option>';
+      line.textContent = 'No saved accounts yet. Add one on Accounts page.';
+      return;
+    }
+    select.innerHTML = loadedAccounts.map(function(acc){
+      var trust = acc.trust ? (' [' + acc.trust + ']') : '';
+      return '<option value="' + acc.id + '">' + escHtml(acc.label || acc.login_email) + trust + '</option>';
+    }).join('');
+    onAccountChanged();
+    if(d.prepare_status && (d.prepare_status.status==='waiting_manual')){
+      var btn = document.getElementById('btn-resume-captcha');
+      if(btn) btn.style.display = '';
+    }
+  }).catch(function(){
+    var line = document.getElementById('account-status-line');
+    if(line) line.textContent = 'Could not load saved accounts.';
+  });
+}
+loadAccounts();
+
+/* ─── Checkbox / selection ─── */
+function toggleRow(row){
+  var cb = row.querySelector('.group-cb');
+  if(!cb) return;
+  cb.checked = !cb.checked;
+  row.classList.toggle('selected-row', cb.checked);
+  updateCounts();
+}
+function rowChecked(cb){
+  cb.closest('.group-row').classList.toggle('selected-row', cb.checked);
+  updateCounts();
+}
+function updateCounts(){
+  var total = document.querySelectorAll('.group-cb:checked').length;
+  document.getElementById('selected-count').textContent = total + ' selected';
+}
+function getVisibleRows(){
+  return Array.from(document.querySelectorAll('.group-row')).filter(r=>r.style.display !== 'none');
+}
+function selectAll(){
+  getVisibleRows().forEach(r=>{
+    var cb = r.querySelector('.group-cb');
+    if(cb){ cb.checked = true; r.classList.add('selected-row'); }
+  });
+  updateCounts();
+}
+function selectFiltered(){
+  selectNone();
+  selectAll();
+}
+function selectNone(){
+  document.querySelectorAll('.group-row').forEach(r=>{
+    var cb = r.querySelector('.group-cb');
+    if(cb){ cb.checked = false; r.classList.remove('selected-row'); }
+  });
+  updateCounts();
+}
+
+/* ─── Language filter (multi-select) ─── */
+function toggleLang(lang, btn){
+  if(lang === 'all'){
+    activeLangs = new Set(['all']);
+  } else {
+    activeLangs.delete('all');
+    if(activeLangs.has(lang)) activeLangs.delete(lang);
+    else activeLangs.add(lang);
+    if(activeLangs.size === 0) activeLangs = new Set(['all']);
+  }
+  document.querySelectorAll('.lang-chip').forEach(b=>{
+    var l = b.dataset.language;
+    var on = activeLangs.has(l) || (l === 'all' && activeLangs.has('all'));
+    b.classList.toggle('active', on);
+  });
+  applyFilters();
+}
+
+/* ─── Combined filter (search + language) ─── */
+function applyFilters(){
+  var q = document.getElementById('g-search').value.toLowerCase().trim();
+  var country = (document.getElementById('g-country').value || '').toLowerCase();
+  var rows = document.querySelectorAll('.group-row');
+  var visible = 0;
+  rows.forEach(r=>{
+    var matchSearch = !q || r.dataset.name.includes(q);
+    var rowLang = (r.dataset.language || 'unknown').toLowerCase();
+    var rowCountry = (r.dataset.country || 'unknown').toLowerCase();
+    var matchLang = activeLangs.has('all') || activeLangs.has(rowLang);
+    var matchCountry = !country || rowCountry === country;
+    var show = matchSearch && matchLang && matchCountry;
+    r.style.display = show ? '' : 'none';
+    if(show) visible++;
+  });
+  var vc = document.getElementById('visible-count');
+  if(vc) vc.textContent = rows.length !== visible ? visible + ' shown' : '';
+  var summary = document.getElementById('filter-summary-text');
+  if(summary){
+    summary.textContent = rows.length === visible
+      ? 'Showing all groups'
+      : 'Filtered results: ' + visible + ' of ' + rows.length;
+  }
+  var selectBtn = document.getElementById('select-filtered-btn');
+  if(selectBtn){
+    selectBtn.textContent = visible === rows.length ? 'Select all' : 'Select filtered (' + visible + ')';
+  }
+}
+
+/* ─── Message / character meter ─── */
+function onMsgInput(){
+  var msg = document.getElementById('post-message').value;
+  var len = msg.length;
+  var limit = 8000;
+  var pct = Math.min(len / limit * 100, 100);
+  document.getElementById('msg-len').textContent = len + ' / ' + limit;
+  var fill = document.getElementById('char-fill');
+  fill.style.width = pct + '%';
+  fill.style.background = pct > 90 ? '#ef4444' : pct > 70 ? '#f59e0b' : '#6366f1';
+  document.getElementById('msg-warn').textContent = len > limit ? 'Message exceeds 8000 characters!' : '';
+}
+
+/* ─── Template quick-pick ─── */
+function loadTplChips(){
+  fetch('/api/templates/list').then(r=>r.json()).then(d=>{
+    var wrap = document.getElementById('tpl-quickpick');
+    var loading = document.getElementById('tpl-loading');
+    if(loading) loading.remove();
+    var tpls = d.templates || [];
+    if(!tpls.length){
+      updateTemplatePostingSummary(0);
+      wrap.insertAdjacentHTML('beforeend','<a href="/templates" style="font-size:.78rem;color:var(--color-primary,#6366f1)">Add templates →</a>');
+      return;
+    }
+    updateTemplatePostingSummary(tpls.length);
+    tpls.slice(0,6).forEach((t,i)=>{
+      var chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'tpl-chip';
+      chip.title = t;
+      chip.textContent = t.substring(0, 32) + (t.length > 32 ? '…' : '');
+      chip.onclick = function(){
+        document.getElementById('post-message').value = t;
+        onMsgInput();
+        chip.style.borderColor = 'var(--color-primary,#6366f1)';
+        setTimeout(()=>chip.style.borderColor='', 1200);
+      };
+      wrap.appendChild(chip);
+    });
+  }).catch(()=>{
+    var l = document.getElementById('tpl-loading');
+    if(l) l.textContent = 'No templates';
+    updateTemplatePostingSummary(0);
+  });
+}
+loadTplChips();
+
+function updateTemplatePostingSummary(count){
+  var summary = document.getElementById('tpl-posting-summary');
+  if(!summary) return;
+  summary.dataset.count = count;
+  summary.textContent = count ? (count + ' template(s) ready') : 'No saved templates';
+}
+
+function onTemplatePostingToggle(){
+  var useTemplates = document.getElementById('post-use-templates').checked;
+  var mode = document.getElementById('post-template-mode').value;
+  var msg = document.getElementById('post-message');
+  var help = document.getElementById('template-mode-help');
+  msg.placeholder = useTemplates
+    ? 'Templates mode is enabled. Your saved templates will be rotated automatically while posting.'
+    : 'Write your post here...\n\nUse {variable} for dynamic content.\nEmoji ✅ and line breaks are fully supported.';
+  help.textContent = {
+    random: 'Each group gets a random template.',
+    sequential: 'Templates are used in saved order and repeat from the start.',
+    shuffle_cycle: 'All templates are shuffled once, then used one by one in a cycle.',
+    reverse: 'Templates are used from the last saved one back to the first.'
+  }[mode] || 'Templates will be rotated automatically.';
+}
+
+function initTemplatePostingFromQuery(){
+  var params = new URLSearchParams(window.location.search);
+  if(params.get('use_templates') === '1'){
+    document.getElementById('post-use-templates').checked = true;
+  }
+  var mode = params.get('template_mode');
+  if(mode && document.querySelector('#post-template-mode option[value="' + mode + '"]')){
+    document.getElementById('post-template-mode').value = mode;
+  }
+  onTemplatePostingToggle();
+}
+initTemplatePostingFromQuery();
+
+/* ─── Posting ─── */
+function setBtnState(isPosting){
+  var btn = document.getElementById('btn-post');
+  var stop = document.getElementById('btn-stop');
+  var pause = document.getElementById('btn-pause');
+  var resume = document.getElementById('btn-resume');
+  btn.disabled = isPosting;
+  btn.style.display = isPosting ? 'none' : '';
+  stop.style.display = isPosting ? '' : 'none';
+  pause.style.display = isPosting ? '' : 'none';
+  resume.style.display = 'none';
+  document.getElementById('status-card').classList.toggle('status-hidden', !isPosting);
+  if(isPosting){
+    document.getElementById('status-dot').style.background = '#10b981';
+    document.getElementById('status-label').textContent = 'Running';
+  } else {
+    document.getElementById('status-dot').style.background = '#6b7280';
+    document.getElementById('status-label').textContent = 'Finished';
+  }
+}
+
+function updateStatusBadge(status){
+  var normalized = (status || '').toLowerCase();
+  var label = document.getElementById('status-label');
+  var dot = document.getElementById('status-dot');
+  if(!label || !dot) return;
+  if(normalized.includes('manual') || normalized.includes('2fa')){
+    label.textContent = status;
+    dot.style.background = '#f59e0b';
+    return;
+  }
+  if(normalized.includes('error') || normalized.includes('fail')){
+    label.textContent = status;
+    dot.style.background = '#ef4444';
+    return;
+  }
+  if(normalized.includes('running') || normalized.includes('start') || normalized.includes('login') || normalized.includes('process')){
+    label.textContent = status;
+    dot.style.background = '#10b981';
+    return;
+  }
+  label.textContent = status || 'Finished';
+  dot.style.background = '#6b7280';
+}
+
+function renderEvents(events){
+  var el = document.getElementById('runtime-log');
+  if(!el) return;
+  if(!events || !events.length){
+    el.innerHTML = '<div class="monitor-event"><small>Runtime log</small>No events yet.</div>';
+    return;
+  }
+  el.innerHTML = events.slice(-80).map(function(evt){
+    var level = (evt.level || '').toLowerCase();
+    var stamp = evt.timestamp || evt.created_at || '';
+    return '<div class="monitor-event ' + level + '">'
+      + '<small>' + escHtml(stamp) + ' • ' + escHtml(level || 'info') + '</small>'
+      + escHtml(evt.message || '')
+      + '</div>';
+  }).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+function statusClass(status){
+  var key = String(status || '').toLowerCase();
+  if(key.includes('success')) return 'monitor-status-success';
+  if(key.includes('process')) return 'monitor-status-processing';
+  if(key.includes('fail') || key.includes('error')) return 'monitor-status-failed';
+  if(key.includes('skip')) return 'monitor-status-skipped';
+  return 'monitor-status-pending';
+}
+
+function renderGroupStatuses(items){
+  var body = document.getElementById('group-status-body');
+  if(!body) return;
+  if(!items || !items.length){
+    body.innerHTML = '<tr><td colspan="3" style="color:var(--color-text-tertiary,#6b7280)">No live group statuses yet.</td></tr>';
+    return;
+  }
+  body.innerHTML = items.map(function(item){
+    var groupName = item.group_name || item.name || item.group_url || item.url || item.group_key || 'Unknown group';
+    var status = item.status || 'Pending';
+    var error = item.error_reason || item.error || '';
+    return '<tr>'
+      + '<td>' + escHtml(groupName) + '</td>'
+      + '<td><span class="monitor-status-badge ' + statusClass(status) + '">' + escHtml(status) + '</span></td>'
+      + '<td>' + escHtml(error) + '</td>'
+      + '</tr>';
+  }).join('');
+}
+
+function startPosting(){
+  var email = document.getElementById('post-email').value.trim();
+  var pwd   = document.getElementById('post-pwd').value;
+  var msg   = document.getElementById('post-message').value.trim();
+  var urls  = Array.from(document.querySelectorAll('.group-cb:checked')).map(c=>c.closest('.group-row').dataset.url);
+  var useTemplates = document.getElementById('post-use-templates').checked;
+  var templateMode = document.getElementById('post-template-mode').value;
+  var templateCount = parseInt((document.getElementById('tpl-posting-summary').dataset.count || '0'), 10);
+  var accountId = document.getElementById('account-select').value;
+  var campaignName = document.getElementById('campaign-name').value.trim();
+  if(!email||!pwd){ showToast('Enter Facebook email and password', 'warning'); return; }
+  if(useTemplates && !templateCount){ showToast('Add at least one saved template first', 'warning'); return; }
+  if(!useTemplates && !msg){         showToast('Message cannot be empty', 'warning'); return; }
+  if(!urls.length){ showToast('Select at least one group', 'warning'); return; }
+
+  setBtnState(true);
+  fetch('/api/post_to_groups',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({username:email,password:pwd,message:useTemplates ? '[TEMPLATE_MODE]' : msg,group_urls:urls,
+      headless:document.getElementById('post-headless').checked,
+      max_groups:parseInt(document.getElementById('post-max').value),
+      use_templates: useTemplates,
+      template_mode: templateMode,
+      account_id: accountId || null,
+      campaign_name: campaignName})
+  }).then(r=>r.json()).then(d=>{
+    if(d.error){ showToast('❌ '+d.error,'danger'); setBtnState(false); }
+    else {
+      activeTaskId = d.task_id || (d.task && d.task.id) || null;
+      showToast('Posting task started','success');
+      setTimeout(pollStatus,1500);
+    }
+  }).catch(()=>{ showToast('Network error','danger'); setBtnState(false); });
+}
+
+function stopPosting(){
+  fetch('/api/stop_posting',{method:'POST'}).then(r=>r.json()).then(d=>{
+    showToast(d.message||'Stopping...','info');
+  });
+}
+
+function pausePosting(){
+  fetch('/api/pause_posting',{method:'POST'}).then(r=>r.json()).then(d=>{
+    if(d.error) showToast(d.error,'warning');
+    else {
+      document.getElementById('btn-pause').style.display = 'none';
+      document.getElementById('btn-resume').style.display = '';
+      showToast(d.message || 'Paused', 'info');
+      pollStatus();
+    }
+  });
+}
+
+function resumePosting(){
+  fetch('/api/resume_posting',{method:'POST'}).then(r=>r.json()).then(d=>{
+    if(d.error) showToast(d.error,'warning');
+    else {
+      document.getElementById('btn-resume').style.display = 'none';
+      document.getElementById('btn-pause').style.display = '';
+      showToast(d.message || 'Resumed', 'success');
+      pollStatus();
+    }
+  });
+}
+
+function retryFailed(){
+  if(!activeTaskId){ showToast('No task selected for retry','warning'); return; }
+  fetch('/api/tasks/' + activeTaskId + '/retry_failed', {method:'POST'}).then(r=>r.json()).then(d=>{
+    if(d.error) showToast(d.error, 'warning');
+    else {
+      activeTaskId = d.task && d.task.id ? d.task.id : activeTaskId;
+      showToast('Retry for failed groups started', 'success');
+      pollStatus();
+    }
+  });
+}
+
+function saveCampaign(){
+  var name = document.getElementById('campaign-name').value.trim();
+  var msg = document.getElementById('post-message').value.trim();
+  var urls  = Array.from(document.querySelectorAll('.group-cb:checked')).map(c=>c.closest('.group-row').dataset.url);
+  var useTemplates = document.getElementById('post-use-templates').checked;
+  if(!name){ showToast('Enter a campaign name first', 'warning'); return; }
+  if(!urls.length){ showToast('Select groups before saving a campaign', 'warning'); return; }
+  fetch('/api/campaigns',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      name:name,
+      message:useTemplates ? '[TEMPLATE_MODE]' : msg,
+      group_urls:urls,
+      max_groups:parseInt(document.getElementById('post-max').value)
+    })
+  }).then(r=>r.json()).then(d=>{
+    if(d.error) showToast(d.error, 'danger');
+    else showToast('Campaign saved as draft', 'success');
+  });
+}
+
+function pollStatus(){
+  fetch('/api/posting_status').then(r=>r.json()).then(d=>{
+    activeTaskId = d.task_id || activeTaskId;
+    var total = d.groups_total || 0;
+    var done  = (d.posts_completed || 0) + (d.posts_failed || 0);
+    var pct   = total > 0 ? Math.round(done/total*100) : 0;
+    var status = String(d.status || '');
+    var normalized = status.toLowerCase();
+    var isActive = !!d.is_posting || ['waiting_manual','queued','running','paused'].includes(String(d.task_status || '').toLowerCase()) || normalized.includes('waiting') || normalized.includes('running') || normalized.includes('starting') || normalized.includes('login') || normalized.includes('paused');
+    setBtnState(isActive);
+    updateStatusBadge(status);
+    document.getElementById('post-progress-text').textContent = done + ' / ' + total;
+    document.getElementById('post-progress-bar').style.width = pct + '%';
+    document.getElementById('posts-ok').textContent   = d.posts_completed || 0;
+    document.getElementById('posts-fail').textContent = d.posts_failed || 0;
+    document.getElementById('posts-time').textContent = d.elapsed_time || '0s';
+    document.getElementById('post-current-group').textContent = d.current_group
+      ? ('→ ' + d.current_group)
+      : (status ? ('Status: ' + status) : '');
+    document.getElementById('btn-retry-failed').style.display = (d.posts_failed || 0) > 0 && !isActive ? '' : 'none';
+    document.getElementById('btn-resume').style.display = normalized.includes('paused') ? '' : 'none';
+    document.getElementById('btn-pause').style.display = isActive && !normalized.includes('paused') ? '' : 'none';
+    renderEvents(d.events || []);
+    renderGroupStatuses(d.group_statuses || []);
+    if(d.session && d.session.status){
+      document.getElementById('account-status-line').textContent = 'Session: ' + d.session.status + (d.session.reason ? ' • ' + d.session.reason : '');
+    }
+    if(isActive) setTimeout(pollStatus, 2000);
+  });
+}
+
+pollStatus();
+
+/* ─── Toast ─── */
+function showToast(msg, type){
+  var colors = {success:'#10b981',warning:'#f59e0b',danger:'#ef4444',info:'#6366f1'};
+  var t = document.createElement('div');
+  t.style.cssText='position:fixed;bottom:24px;right:24px;z-index:9999;max-width:380px;padding:14px 18px;border-radius:12px;background:#fff;box-shadow:0 10px 40px rgba(0,0,0,.15);font-size:.875rem;font-weight:500;display:flex;align-items:center;gap:10px;border-left:4px solid '+(colors[type]||colors.info);
+  t.innerHTML='<span>'+msg+'</span>';
+  document.body.appendChild(t);
+  requestAnimationFrame(()=>t.style.transition='opacity .4s');
+  setTimeout(()=>{ t.style.opacity='0'; setTimeout(()=>t.remove(),400); }, 3800);
+}
+</script>
+{% endblock %}

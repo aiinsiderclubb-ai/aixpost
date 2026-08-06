@@ -300,7 +300,15 @@ def api_account_validate(account_id: int):
     if result.get('trusted'):
         orch.mark_trusted(user_id, account_id, profile_dir=result.get('profile_dir'))
     else:
-        orch.mark_needs_verify(user_id, account_id, result.get('error') or 'Session invalid')
+        # Soft mark only — Validate must NOT put a fresh account into cooldown/Blocked.
+        orch.clear_cooldown(user_id, account_id)
+        orch.mark_needs_verify(
+            user_id,
+            account_id,
+            result.get('error') or 'Session invalid — run Prepare',
+            apply_cooldown=False,
+            penalize_health=False,
+        )
     return jsonify(result), 200
 
 @bp.route('/api/accounts/<int:account_id>/resume-manual', methods=['POST'])
@@ -345,7 +353,14 @@ def api_account_resume_manual(account_id: int):
         if result.get('trusted'):
             orch.mark_trusted(user_id, account_id, profile_dir=result.get('profile_dir'))
         else:
-            orch.mark_needs_verify(user_id, account_id, result.get('error') or 'Session invalid')
+            orch.clear_cooldown(user_id, account_id)
+            orch.mark_needs_verify(
+                user_id,
+                account_id,
+                result.get('error') or 'Session invalid — run Prepare',
+                apply_cooldown=False,
+                penalize_health=False,
+            )
         return jsonify({'message': 'No live browser — validated profile', **result}), 200
 
     get_progress_tracker(user_id).update(

@@ -146,7 +146,17 @@ class AccountOrchestrator:
         candidates.sort(key=lambda row: (row[0], row[1], row[2]), reverse=True)
         return candidates[0][3], ""
 
-    def mark_needs_verify(self, user_id: int, account_id: int, reason: str, *, checkpoint: bool = False, needs_2fa: bool = False) -> None:
+    def mark_needs_verify(
+        self,
+        user_id: int,
+        account_id: int,
+        reason: str,
+        *,
+        checkpoint: bool = False,
+        needs_2fa: bool = False,
+        apply_cooldown: bool = True,
+        penalize_health: bool = True,
+    ) -> None:
         self.store.record_session(
             user_id=user_id,
             account_id=account_id,
@@ -158,14 +168,21 @@ class AccountOrchestrator:
             last_validated_at=datetime.utcnow().isoformat(),
         )
         self.store.update_account_status(account_id, "needs_verify", reason)
-        cooldown_minutes = max(1, int(AppConfig.ACCOUNT_COOLDOWN_MINUTES))
-        cooldown = datetime.now(timezone.utc) + timedelta(minutes=cooldown_minutes)
         account = self.store.get_account(account_id) or {}
+        score = int(account.get("health_score") or 100)
+        failures = int(account.get("consecutive_failures") or 0)
+        cooldown_until = account.get("cooldown_until")
+        if penalize_health:
+            score = max(0, score - 15)
+            failures = failures + 1
+        if apply_cooldown:
+            cooldown_minutes = max(1, int(AppConfig.ACCOUNT_COOLDOWN_MINUTES))
+            cooldown_until = (datetime.now(timezone.utc) + timedelta(minutes=cooldown_minutes)).isoformat()
         self.store.update_account_health(
             account_id,
-            health_score=max(0, int(account.get("health_score") or 100) - 15),
-            consecutive_failures=int(account.get("consecutive_failures") or 0) + 1,
-            cooldown_until=cooldown.isoformat(),
+            health_score=score,
+            consecutive_failures=failures,
+            cooldown_until=cooldown_until if apply_cooldown else None,
             last_error=reason,
         )
 

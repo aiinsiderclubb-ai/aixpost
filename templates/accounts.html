@@ -299,7 +299,11 @@ function prepareAccount(id){
 function validateAccount(id){
   api('/api/accounts/'+id+'/validate',{method:'POST',body:'{}'})
     .then(r=>r.json()).then(d=>{
-      alert(d.trusted ? 'Trusted ✓' : ('Not trusted: '+(d.error||d.status)));
+      if(d.trusted){
+        alert('Trusted ✓');
+      } else {
+        alert('Сессия ещё не готова: '+(d.error||d.status||'unknown')+'\n\nНажми Prepare и пройди CAPTCHA/2FA.');
+      }
       refreshAccounts();
     });
 }

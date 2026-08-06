@@ -1,6 +1,7 @@
 """accounts routes extracted from run_test_v2."""
 from __future__ import annotations
 
+import os
 from functools import wraps
 
 from flask import (
@@ -208,6 +209,22 @@ def api_account_prepare(account_id: int):
             'code': 'CREDENTIALS_MISSING',
             'hint': '/accounts',
         }), 400
+
+    # Interactive Prepare needs a visible browser. On Render web there is no user-facing display.
+    if (os.environ.get('RENDER') or '').strip() or (
+        (os.environ.get('FLASK_ENV') or '').lower() == 'production'
+        and not (os.environ.get('DISPLAY') or '').strip()
+        and (os.environ.get('ALLOW_CLOUD_PREPARE') or '').lower() not in ('1', 'true', 'yes')
+    ):
+        return jsonify({
+            'error': (
+                'Prepare на Render не может показать Chrome для CAPTCHA/2FA. '
+                'Запусти платформу локально на Mac и нажми Prepare там, '
+                'либо поставь ALLOW_CLOUD_PREPARE=true только если есть visible/VNC display.'
+            ),
+            'code': 'CLOUD_PREPARE_UNSUPPORTED',
+            'hint': 'Local Prepare on Mac → Trusted session, then cloud posting can reuse profile if shared storage exists.',
+        }), 409
 
     from bot.account_preparer import AccountPreparer
     from app.services.account_orchestrator import AccountOrchestrator

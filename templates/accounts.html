@@ -7,6 +7,12 @@
   Сначала подготовьте аккаунт (Prepare) — пройдите CAPTCHA/2FA в Chrome. Зелёный Trusted нужен для Fetch и Posting.
   Новые аккаунты стартуют с безопасными лимитами; первые дни — warm-up.
 </p>
+<div class="alert alert-warning py-2 small mb-3">
+  <strong>Cloud / Render:</strong> Prepare запускает Chrome <em>на сервере</em>, который ты не видишь.
+  CAPTCHA/2FA там пройти нельзя — поэтому статус может висеть на <code>login</code>.
+  Для первого входа нужен Prepare на Mac (локально) или уже сохранённая сессия.
+  Ошибка WebSocket в консоли обычно шум: прогресс также обновляется через Refresh / poll.
+</div>
 
 <div class="card mb-4">
   <div class="card-body py-3">
@@ -291,7 +297,11 @@ function prepareAccount(id){
   renderPrepare({status:'running',step:'starting',message:'Запуск Prepare...',progress:5});
   api('/api/accounts/'+id+'/prepare',{method:'POST',body:'{}'})
     .then(r=>r.json().then(d=>({ok:r.ok,d}))).then(res=>{
-      if(!res.ok){ renderPrepare({status:'failed',error:res.d.error||'Failed'}); return; }
+      if(!res.ok){
+        renderPrepare({status:'failed',error:res.d.error||'Failed'});
+        alert(res.d.error||'Prepare failed');
+        return;
+      }
       pollPrepare();
     });
 }

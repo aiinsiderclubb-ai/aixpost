@@ -11,7 +11,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    wget gnupg unzip curl xvfb \
+    wget gnupg unzip curl xvfb x11vnc novnc websockify fluxbox \
     fonts-liberation libasound2 libatk-bridge2.0-0 libatk1.0-0 libcups2 \
     libdbus-1-3 libdrm2 libgbm1 libgtk-3-0 libnspr4 libnss3 libx11-xcb1 \
     libxcomposite1 libxdamage1 libxrandr2 xdg-utils \
@@ -35,7 +35,7 @@ RUN groupadd -r appuser && useradd -r -g appuser appuser \
     && chown -R appuser:appuser /app
 
 COPY . .
-RUN chmod +x /app/scripts/start_web.sh /app/scripts/start_worker.sh \
+RUN chmod +x /app/scripts/start_web.sh /app/scripts/start_worker.sh /app/scripts/start_browser_worker.sh \
     && chown -R appuser:appuser /app
 
 # Chrome needs writable dirs; keep root for Xvfb on workers (override in web if needed).

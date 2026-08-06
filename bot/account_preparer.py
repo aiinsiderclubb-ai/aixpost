@@ -234,6 +234,15 @@ class AccountPreparer:
                     return False
                 if not fetcher._ensure_window_alive("manual verification"):
                     return False
+                # Cross-process resume from dashboard (RQ worker)
+                try:
+                    from bot.prepare_signals import consume_prepare_resume
+
+                    if consume_prepare_resume(self.account_id):
+                        self.resume_event.set()
+                        setattr(fetcher, "manual_resume_requested", True)
+                except Exception:
+                    pass
                 if self.resume_event.is_set() or getattr(fetcher, "manual_resume_requested", False):
                     self.resume_event.clear()
                     setattr(fetcher, "manual_resume_requested", False)

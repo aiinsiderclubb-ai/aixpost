@@ -45,6 +45,13 @@ class AppConfig:
         "true",
         "yes",
     )
+    # Public noVNC base URL for cloud Prepare (e.g. https://aixpost-browser.onrender.com)
+    NOVNC_PUBLIC_URL = (os.environ.get("NOVNC_PUBLIC_URL") or "").strip().rstrip("/")
+    ALLOW_CLOUD_PREPARE = os.environ.get("ALLOW_CLOUD_PREPARE", "false").lower() in (
+        "1",
+        "true",
+        "yes",
+    ) or bool(NOVNC_PUBLIC_URL)
 
     @classmethod
     def sqlalchemy_database_uri(cls) -> str:

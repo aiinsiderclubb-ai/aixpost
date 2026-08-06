@@ -271,3 +271,164 @@ def run_analytics_batch_task(limit: int = 10) -> dict:
     from bot.analytics_collector import process_pending_checks
 
     return process_pending_checks(limit=limit)
+
+
+def run_prepare_task_v2(task_id: int, user_id: int, account_id: int) -> dict:
+    """RQ Prepare: visible Chrome on worker DISPLAY (viewable via noVNC)."""
+    store = _get_runtime_store()
+    account = store.get_account(int(account_id))
+    if not account or int(account.get("user_id") or 0) != int(user_id):
+        raise RuntimeError("Account not found")
+
+    from app.services.account_orchestrator import AccountOrchestrator
+    from bot.account_preparer import AccountPreparer
+    from bot.prepare_signals import novnc_embed_url
+
+    # Prefer account credentials from runtime store
+    username = (account.get("login_email") or "").strip()
+    password = ""
+    enc = account.get("encrypted_password") or ""
+    if enc:
+        try:
+            password = _get_cipher().decrypt(enc.encode()).decode()
+        except Exception:
+            password = ""
+    if not username or not password:
+        # Fallback to primary user FB creds
+        username, password = _get_user_facebook_credentials(user_id)
+    if not username or not password:
+        raise RuntimeError("Facebook credentials missing")
+
+    orch = AccountOrchestrator(store)
+    store.update_task(task_id, status="running", started_at=datetime.utcnow().isoformat())
+    store.append_task_event(task_id, "Prepare started on browser worker", event_type="system")
+    vnc = novnc_embed_url()
+    if vnc:
+        _broadcast(
+            user_id,
+            "prepare_progress",
+            {
+                "status": "running",
+                "step": "novnc",
+                "message": "Откройте окно Chrome ниже и пройдите логин/CAPTCHA",
+                "progress": 8,
+                "account_id": account_id,
+                "task_id": task_id,
+                "vnc_url": vnc,
+            },
+        )
+
+    def _progress(payload: dict):
+        status = payload.get("status")
+        if status == "waiting_manual":
+            store.update_task(
+                task_id,
+                status="waiting_manual",
+                heartbeat_at=datetime.utcnow().isoformat(),
+            )
+            orch.mark_needs_verify(
+                user_id,
+                account_id,
+                payload.get("message") or "Manual verification required",
+                apply_cooldown=False,
+                penalize_health=False,
+            )
+        store.append_task_event(
+            task_id,
+            payload.get("message") or payload.get("step") or "prepare-progress",
+            event_type="progress",
+            metadata={**payload, "vnc_url": vnc},
+        )
+        _broadcast(
+            user_id,
+            "prepare_progress",
+            {**payload, "account_id": account_id, "task_id": task_id, "vnc_url": vnc},
+        )
+
+    # Profiles on persistent disk when available
+    profile_dir = account.get("profile_dir")
+    data_root = os.environ.get("RUNTIME_PROFILE_ROOT") or "/app/data/profiles"
+    if not profile_dir or str(profile_dir).startswith("/opt/render/project"):
+        profile_dir = os.path.join(data_root, f"profile_account_{account_id}")
+        os.makedirs(profile_dir, exist_ok=True)
+        try:
+            store.upsert_account(
+                user_id=user_id,
+                login_email=account.get("login_email") or username,
+                encrypted_password=account.get("encrypted_password") or "",
+                label=account.get("label"),
+                is_primary=bool(account.get("is_primary")),
+                is_active=bool(account.get("is_active", True)),
+                priority=int(account.get("priority") or 0),
+                hourly_limit=int(account.get("hourly_limit") or 0),
+                daily_limit=int(account.get("daily_limit") or 0),
+                notes=account.get("notes"),
+                profile_dir=profile_dir,
+            )
+        except Exception:
+            pass
+
+    preparer = AccountPreparer(
+        user_id=user_id,
+        account_id=int(account_id),
+        username=username,
+        password=password,
+        profile_dir=profile_dir,
+        progress_callback=_progress,
+    )
+    try:
+        result = preparer.prepare()
+    except Exception as exc:
+        store.update_task(
+            task_id,
+            status="failed",
+            error_message=str(exc),
+            finished_at=datetime.utcnow().isoformat(),
+        )
+        _broadcast(
+            user_id,
+            "prepare_progress",
+            {"status": "failed", "error": str(exc), "account_id": account_id, "task_id": task_id},
+        )
+        raise
+
+    if result.get("trusted"):
+        orch.mark_trusted(user_id, int(account_id), profile_dir=result.get("profile_dir"))
+        store.update_task(
+            task_id,
+            status="completed",
+            result_json=result,
+            finished_at=datetime.utcnow().isoformat(),
+        )
+        _broadcast(
+            user_id,
+            "prepare_progress",
+            {
+                "status": "trusted",
+                "message": "Trusted",
+                "progress": 100,
+                "account_id": account_id,
+                "task_id": task_id,
+            },
+        )
+    else:
+        status = result.get("status") or "failed"
+        store.update_task(
+            task_id,
+            status=status if status in ("waiting_manual", "failed", "needs_verify") else "failed",
+            error_message=result.get("error"),
+            result_json=result,
+            finished_at=datetime.utcnow().isoformat() if status != "waiting_manual" else None,
+        )
+        _broadcast(
+            user_id,
+            "prepare_progress",
+            {
+                "status": status,
+                "message": result.get("error") or status,
+                "account_id": account_id,
+                "task_id": task_id,
+                "vnc_url": vnc,
+            },
+        )
+    return result

@@ -10,20 +10,14 @@
 <div class="alert alert-warning py-2 small mb-3">
   <div class="d-flex flex-wrap gap-2 align-items-start justify-content-between">
     <div>
-      <strong>Первый вход / CAPTCHA:</strong>
-      на Render Prepare не показывает Chrome. Открой Facebook в отдельном окне (проверка аккаунта у себя),
-      а <strong>Trusted для бота</strong> получи только через Prepare на Mac (локально).
-      WebSocket в консоли — обычно шум; прогресс также через Refresh.
+      <strong>Cloud Prepare:</strong> после Prepare появится окно <em>noVNC</em> с Chrome на сервере —
+      пройди логин/CAPTCHA мышкой, затем «Я прошёл CAPTCHA».
+      Кнопка «Открыть Facebook» — только твой браузер (без сессии бота).
     </div>
     <button type="button" class="btn btn-sm btn-outline-primary text-nowrap" onclick="openFacebookLogin()">
       <i class="bi bi-box-arrow-up-right me-1"></i>Открыть Facebook
     </button>
   </div>
-  <ol class="mb-0 mt-2 ps-3">
-    <li>Нажми «Открыть Facebook» → войди / пройди 2FA в popup.</li>
-    <li>Это <em>не</em> сессия бота — только удобный вход в свой браузер.</li>
-    <li>Для автоматизации: локально на Mac → Prepare → зелёный Trusted.</li>
-  </ol>
 </div>
 
 <div class="card mb-4">
@@ -101,8 +95,18 @@
         </div>
         <div id="prepare-msg" class="alert alert-info py-2 small d-none"></div>
         <div id="prepare-err" class="alert alert-danger py-2 small d-none"></div>
+        <div id="novnc-wrap" class="d-none mt-3">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="small fw-semibold">Cloud Chrome (noVNC) — кликай CAPTCHA/2FA здесь</span>
+            <a id="novnc-open" class="btn btn-sm btn-outline-secondary" href="#" target="_blank" rel="noopener">Open fullscreen</a>
+          </div>
+          <iframe id="novnc-frame" title="Cloud Chrome" style="width:100%;height:420px;border:1px solid rgba(0,0,0,.15);border-radius:8px;background:#111"></iframe>
+          <p class="small mt-2 mb-0" style="color:var(--text-muted)">
+            После входа нажми «Я прошёл CAPTCHA». Если iframe пустой — открой fullscreen или проверь NOVNC_PUBLIC_URL.
+          </p>
+        </div>
         <p class="small mb-0 mt-2" style="color:var(--text-muted)">
-          Popup Facebook = твой браузер. Сессия бота создаётся только через Prepare (локально).
+          Popup «Открыть Facebook» = твой браузер. Cloud Prepare = окно noVNC выше.
         </p>
       </div>
     </div>
@@ -240,6 +244,24 @@ function applySafetyDefaults(d){
     safety.warmup_days+' days capped at '+safety.warmup_hourly+'/h · '+safety.warmup_daily+'/d.';
 }
 
+function showNovnc(url){
+  if(!url) return;
+  var wrap=document.getElementById('novnc-wrap');
+  var frame=document.getElementById('novnc-frame');
+  var link=document.getElementById('novnc-open');
+  if(!wrap||!frame) return;
+  wrap.classList.remove('d-none');
+  if(frame.getAttribute('src')!==url) frame.setAttribute('src', url);
+  if(link){ link.href=url; }
+}
+
+function hideNovnc(){
+  var wrap=document.getElementById('novnc-wrap');
+  var frame=document.getElementById('novnc-frame');
+  if(wrap) wrap.classList.add('d-none');
+  if(frame) frame.removeAttribute('src');
+}
+
 function renderPrepare(d){
   var status = d.status || 'idle';
   document.getElementById('prepare-pill').textContent = status === 'waiting_manual' ? '2FA/CAPTCHA' : status;
@@ -252,10 +274,16 @@ function renderPrepare(d){
   document.getElementById('prepare-bar').style.width = (d.progress||0)+'%';
   var msg = document.getElementById('prepare-msg');
   var err = document.getElementById('prepare-err');
-  if(status==='waiting_manual'){
-    msg.textContent = d.message || 'Пройдите CAPTCHA/2FA в Chrome, затем нажмите «Я прошёл CAPTCHA».';
+  if(d.vnc_url) showNovnc(d.vnc_url);
+  if(status==='waiting_manual' || status==='running' || status==='queued'){
+    msg.textContent = d.message || (d.vnc_url
+      ? 'Пройди CAPTCHA/2FA в окне Cloud Chrome ниже, затем «Я прошёл CAPTCHA».'
+      : 'Пройдите CAPTCHA/2FA в Chrome, затем нажмите «Я прошёл CAPTCHA».');
     msg.classList.remove('d-none');
   } else { msg.classList.add('d-none'); }
+  if(status==='trusted'||status==='completed'||status==='failed'){
+    // keep vnc visible briefly on failure for debugging
+  }
   if(d.error){ err.textContent=d.error; err.classList.remove('d-none'); }
   else err.classList.add('d-none');
 }
@@ -345,6 +373,7 @@ function prepareAccount(id){
         alert(res.d.error||'Prepare failed');
         return;
       }
+      if(res.d.vnc_url) showNovnc(res.d.vnc_url);
       pollPrepare();
     });
 }

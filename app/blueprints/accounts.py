@@ -190,6 +190,9 @@ def api_account_trust(account_id: int):
 @jwt_required()
 def api_account_prepare(account_id: int):
     """Start Prepare Account (visible Chrome + CAPTCHA wait)."""
+    from app.core.config import AppConfig
+    from bot.prepare_signals import novnc_embed_url
+
     user_id = int(get_jwt_identity())
     user = User.query.get(user_id)
     if not user:
@@ -200,7 +203,11 @@ def api_account_prepare(account_id: int):
 
     active = runtime_store.get_latest_task(user_id, 'prepare_account')
     if active and active.get('status') in ('queued', 'running', 'waiting_manual'):
-        return jsonify({'error': 'Prepare already in progress', 'task': active}), 400
+        return jsonify({
+            'error': 'Prepare already in progress',
+            'task': active,
+            'vnc_url': novnc_embed_url(),
+        }), 400
 
     username, password = _account_credentials(account, user)
     if not username or not password:
@@ -210,21 +217,57 @@ def api_account_prepare(account_id: int):
             'hint': '/accounts',
         }), 400
 
-    # Interactive Prepare needs a visible browser. On Render web there is no user-facing display.
-    if (os.environ.get('RENDER') or '').strip() or (
-        (os.environ.get('FLASK_ENV') or '').lower() == 'production'
-        and not (os.environ.get('DISPLAY') or '').strip()
-        and (os.environ.get('ALLOW_CLOUD_PREPARE') or '').lower() not in ('1', 'true', 'yes')
-    ):
+    vnc_url = novnc_embed_url()
+    cloud_ok = bool(AppConfig.ALLOW_CLOUD_PREPARE or vnc_url)
+    on_render = bool((os.environ.get('RENDER') or '').strip())
+    if on_render and not cloud_ok and not (os.environ.get('DISPLAY') or '').strip():
         return jsonify({
             'error': (
-                'Prepare на Render не может показать Chrome для CAPTCHA/2FA. '
-                'Запусти платформу локально на Mac и нажми Prepare там, '
-                'либо поставь ALLOW_CLOUD_PREPARE=true только если есть visible/VNC display.'
+                'Prepare в облаке требует noVNC browser worker (NOVNC_PUBLIC_URL). '
+                'Либо Prepare локально на Mac.'
             ),
             'code': 'CLOUD_PREPARE_UNSUPPORTED',
-            'hint': 'Local Prepare on Mac → Trusted session, then cloud posting can reuse profile if shared storage exists.',
         }), 409
+
+    # Prefer RQ → browser worker (same machine as noVNC / Chrome)
+    use_rq = bool(getattr(AppConfig, 'USE_RQ_WORKERS', False) and job_queue is not None)
+    if use_rq:
+        task_id = runtime_store.create_task(
+            user_id,
+            'prepare_account',
+            f'Prepare account #{account_id}',
+            {'account_id': account_id},
+            status='queued',
+            task_key=f'prepare:{user_id}:{account_id}',
+            queue_mode='rq',
+            resumable=1,
+        )
+        try:
+            from rq_tasks import run_prepare_task_v2
+
+            job_queue.enqueue(
+                run_prepare_task_v2,
+                task_id=task_id,
+                user_id=user_id,
+                account_id=account_id,
+                job_timeout='2h',
+            )
+            task = runtime_store.get_task(task_id) or {'id': task_id, 'status': 'queued'}
+            return jsonify({
+                'message': 'Prepare queued on browser worker',
+                'task': task,
+                'task_id': task_id,
+                'vnc_url': vnc_url,
+                'mode': 'rq_novnc' if vnc_url else 'rq',
+            }), 202
+        except Exception as enqueue_err:
+            runtime_store.append_task_event(
+                task_id,
+                f'RQ enqueue failed: {enqueue_err}',
+                level='warning',
+                event_type='dispatch',
+            )
+            # fall through to local
 
     from bot.account_preparer import AccountPreparer
     from app.services.account_orchestrator import AccountOrchestrator
@@ -242,14 +285,24 @@ def api_account_prepare(account_id: int):
             status = payload.get('status')
             if status == 'waiting_manual':
                 runtime_store.update_task(task_id, status='waiting_manual', heartbeat_at=datetime.utcnow().isoformat())
-                orch.mark_needs_verify(user_id, account_id, payload.get('message') or 'Manual verification required')
+                orch.mark_needs_verify(
+                    user_id,
+                    account_id,
+                    payload.get('message') or 'Manual verification required',
+                    apply_cooldown=False,
+                    penalize_health=False,
+                )
             runtime_store.append_task_event(
                 task_id,
                 payload.get('message') or payload.get('step') or 'prepare-progress',
                 event_type='progress',
                 metadata=payload,
             )
-            broadcast_to_user(user_id, 'prepare_progress', {**payload, 'account_id': account_id, 'task_id': task_id})
+            broadcast_to_user(
+                user_id,
+                'prepare_progress',
+                {**payload, 'account_id': account_id, 'task_id': task_id, 'vnc_url': vnc_url},
+            )
 
         preparer = AccountPreparer(
             user_id=user_id,
@@ -289,7 +342,13 @@ def api_account_prepare(account_id: int):
         runner=_runner,
         task_key=f'prepare:{user_id}:{account_id}',
     )
-    return jsonify({'message': 'Prepare started', 'task': task, 'task_id': task.get('id')}), 202
+    return jsonify({
+        'message': 'Prepare started',
+        'task': task,
+        'task_id': task.get('id'),
+        'vnc_url': vnc_url,
+        'mode': 'local',
+    }), 202
 
 @bp.route('/api/accounts/<int:account_id>/validate', methods=['POST'])
 @jwt_required()
@@ -338,10 +397,14 @@ def api_account_resume_manual(account_id: int):
         return jsonify({'error': 'Account not found'}), 404
 
     from bot.account_preparer import get_active_preparer
+    from bot.prepare_signals import request_prepare_resume, novnc_embed_url
     preparer = get_active_preparer(account_id)
     signaled = False
     if preparer:
         signaled = preparer.signal_resume_manual()
+    # Cross-process (RQ browser worker)
+    if request_prepare_resume(account_id):
+        signaled = True
 
     # Also nudge active fetcher/poster if they share the challenge.
     global fetcher_instance, poster_instance
@@ -386,7 +449,11 @@ def api_account_resume_manual(account_id: int):
         message='Проверяем после ручной верификации...',
         progress=25,
     )
-    return jsonify({'message': 'Resume signal sent', 'signaled': True}), 200
+    return jsonify({
+        'message': 'Resume signal sent',
+        'signaled': True,
+        'vnc_url': novnc_embed_url(),
+    }), 200
 
 @bp.route('/api/accounts/pick', methods=['POST'])
 @jwt_required()

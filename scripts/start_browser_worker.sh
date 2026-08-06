@@ -57,11 +57,30 @@ else
   echo "ERROR: websockify not found" >&2
   exit 1
 fi
-sleep 1
+WS_PID=$!
+sleep 2
+
+if ! kill -0 "$WS_PID" 2>/dev/null; then
+  echo "ERROR: websockify died — see /tmp/websockify.log" >&2
+  cat /tmp/websockify.log >&2 || true
+  exit 1
+fi
 
 # Health marker for the dashboard
 echo "ok" > /tmp/novnc_ready
 echo "noVNC ready at http://0.0.0.0:${NOVNC_PORT}/vnc.html"
 
-echo "Starting RQ worker"
-exec python -u rq_worker.py
+if [[ -z "${REDIS_URL:-}" ]]; then
+  echo "WARNING: REDIS_URL unset — serving noVNC only (RQ disabled)" >&2
+  # Keep container alive for health checks / CAPTCHA viewing
+  wait "$WS_PID"
+  exit $?
+fi
+
+echo "Starting RQ worker (queues=${RQ_QUEUES})"
+# Restart RQ if it crashes — do not take down noVNC
+while true; do
+  python -u rq_worker.py || true
+  echo "RQ worker exited — restarting in 5s" >&2
+  sleep 5
+done

@@ -85,6 +85,7 @@
         <span>Live prepare status</span>
         <div class="d-flex gap-2 align-items-center">
           <button type="button" class="btn btn-sm btn-outline-primary" onclick="openFacebookLogin()">Открыть Facebook</button>
+          <button type="button" class="btn btn-sm btn-outline-danger" onclick="cancelPrepare()">Cancel Prepare</button>
           <span class="badge bg-secondary" id="prepare-pill">idle</span>
         </div>
       </div>
@@ -200,7 +201,7 @@ function openFacebookLogin(email){
   try { win.focus(); } catch(e) {}
   var hint = document.getElementById('prepare-msg');
   if(hint){
-    hint.textContent = 'Открыт Facebook login. Войди в popup — это твой браузер, не сессия бота. Trusted для бота: Prepare на Mac.';
+    hint.textContent = 'Открыт Facebook login в popup — это твой Safari/Chrome, не сессия бота. Для Trusted жми Prepare (Cloud Chrome / noVNC).';
     hint.classList.remove('d-none');
   }
 }
@@ -369,12 +370,33 @@ function prepareAccount(id){
   api('/api/accounts/'+id+'/prepare',{method:'POST',body:'{}'})
     .then(r=>r.json().then(d=>({ok:r.ok,d}))).then(res=>{
       if(!res.ok){
-        renderPrepare({status:'failed',error:res.d.error||'Failed'});
+        if(res.d.vnc_url) showNovnc(res.d.vnc_url);
+        renderPrepare({
+          status:'failed',
+          error:res.d.error||'Failed',
+          vnc_url:res.d.vnc_url,
+          message:res.d.message
+        });
         alert(res.d.error||'Prepare failed');
         return;
       }
       if(res.d.vnc_url) showNovnc(res.d.vnc_url);
+      renderPrepare({
+        status: res.d.status || (res.d.mode==='reattach' ? 'running' : 'queued'),
+        message: res.d.message || 'Prepare queued',
+        progress: res.d.mode==='reattach' ? 20 : 8,
+        vnc_url: res.d.vnc_url
+      });
       pollPrepare();
+    });
+}
+
+function cancelPrepare(){
+  api('/api/accounts/prepare/cancel',{method:'POST',body:'{}'})
+    .then(r=>r.json()).then(d=>{
+      hideNovnc();
+      renderPrepare({status:'failed', message:d.message||'Cancelled', progress:0});
+      refreshAccounts();
     });
 }
 

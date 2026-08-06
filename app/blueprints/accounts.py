@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 from functools import wraps
 
 from flask import (
@@ -186,6 +187,36 @@ def api_account_trust(account_id: int):
     trust = runtime_store.get_account_trust(account_id)
     return jsonify(trust), 200
 
+def _parse_task_ts(value) -> datetime | None:
+    if not value:
+        return None
+    try:
+        text = str(value).replace('Z', '+00:00')
+        dt = datetime.fromisoformat(text)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception:
+        return None
+
+
+def _prepare_task_stale(task: dict, *, queued_seconds: int = 180, running_seconds: int = 600) -> bool:
+    """True when a prepare task is stuck and safe to replace."""
+    status = (task or {}).get('status')
+    if status not in ('queued', 'running', 'waiting_manual', 'paused', 'stopping'):
+        return False
+    now = datetime.now(timezone.utc)
+    created = _parse_task_ts(task.get('created_at')) or now
+    heartbeat = _parse_task_ts(task.get('heartbeat_at')) or created
+    age = (now - heartbeat).total_seconds()
+    if status == 'queued':
+        return age >= queued_seconds
+    if status in ('running', 'paused', 'stopping'):
+        return age >= running_seconds
+    # waiting_manual: user may take long; only stale if no heartbeat for 2h
+    return age >= 7200
+
+
 @bp.route('/api/accounts/<int:account_id>/prepare', methods=['POST'])
 @jwt_required()
 def api_account_prepare(account_id: int):
@@ -201,13 +232,33 @@ def api_account_prepare(account_id: int):
     if not account or int(account.get('user_id') or 0) != user_id:
         return jsonify({'error': 'Account not found'}), 404
 
-    active = runtime_store.get_latest_task(user_id, 'prepare_account')
-    if active and active.get('status') in ('queued', 'running', 'waiting_manual'):
-        return jsonify({
-            'error': 'Prepare already in progress',
-            'task': active,
-            'vnc_url': novnc_embed_url(),
-        }), 400
+    data = request.get_json(silent=True) or {}
+    force = bool(data.get('force'))
+    vnc_url = novnc_embed_url()
+
+    active = runtime_store.get_active_task(user_id, 'prepare_account')
+    if active:
+        if force or _prepare_task_stale(active):
+            runtime_store.update_task(
+                int(active['id']),
+                status='failed',
+                error_message='Superseded by a new Prepare' if force else 'Stale prepare cleared',
+                finished_at=datetime.now(timezone.utc).isoformat(),
+            )
+            try:
+                runtime_store.request_stop(int(active['id']), user_id)
+            except Exception:
+                pass
+        else:
+            # Re-attach: show noVNC instead of blocking the user with a red error
+            return jsonify({
+                'message': 'Prepare already in progress — open Cloud Chrome below',
+                'task': active,
+                'task_id': active.get('id'),
+                'vnc_url': vnc_url,
+                'mode': 'reattach',
+                'status': active.get('status') or 'running',
+            }), 200
 
     username, password = _account_credentials(account, user)
     if not username or not password:
@@ -217,7 +268,6 @@ def api_account_prepare(account_id: int):
             'hint': '/accounts',
         }), 400
 
-    vnc_url = novnc_embed_url()
     cloud_ok = bool(AppConfig.ALLOW_CLOUD_PREPARE or vnc_url)
     on_render = bool((os.environ.get('RENDER') or '').strip())
     if on_render and not cloud_ok and not (os.environ.get('DISPLAY') or '').strip():
@@ -350,6 +400,33 @@ def api_account_prepare(account_id: int):
         'vnc_url': vnc_url,
         'mode': 'local',
     }), 202
+
+
+@bp.route('/api/accounts/prepare/cancel', methods=['POST'])
+@jwt_required()
+def api_prepare_cancel():
+    """Cancel the active Prepare task so a new one can start."""
+    user_id = int(get_jwt_identity())
+    active = runtime_store.get_active_task(user_id, 'prepare_account')
+    if not active:
+        return jsonify({'message': 'No active Prepare', 'cancelled': False}), 200
+    task_id = int(active['id'])
+    try:
+        runtime_store.request_stop(task_id, user_id)
+    except Exception:
+        pass
+    runtime_store.update_task(
+        task_id,
+        status='failed',
+        error_message='Cancelled by user',
+        finished_at=datetime.now(timezone.utc).isoformat(),
+    )
+    return jsonify({
+        'message': 'Prepare cancelled — press Prepare again',
+        'cancelled': True,
+        'task_id': task_id,
+    }), 200
+
 
 @bp.route('/api/accounts/<int:account_id>/validate', methods=['POST'])
 @jwt_required()

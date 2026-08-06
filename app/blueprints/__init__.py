@@ -129,6 +129,46 @@ def register_blueprints(app: Flask) -> None:
             continue
         app.register_blueprint(mod.bp)
 
+    # Legacy aliases: templates still call url_for('dashboard') not 'pages.dashboard'.
+    _alias_blueprint_endpoints(app)
+
+
+def _alias_blueprint_endpoints(app: Flask) -> None:
+    """Register short endpoint names that point at the same view functions."""
+    existing = set(app.view_functions)
+    for endpoint, view in list(app.view_functions.items()):
+        if "." not in endpoint:
+            continue
+        short = endpoint.split(".", 1)[1]
+        if short in existing:
+            continue
+        app.view_functions[short] = view
+        existing.add(short)
+
+    # Ensure url_for(short) can build — mirror each rule under the short endpoint.
+    rules = list(app.url_map.iter_rules())
+    aliased = {ep for ep in app.view_functions if "." not in ep}
+    for rule in rules:
+        if "." not in (rule.endpoint or ""):
+            continue
+        short = rule.endpoint.split(".", 1)[1]
+        if short not in aliased:
+            continue
+        # Skip if a rule for this short endpoint already exists
+        if any(r.endpoint == short for r in app.url_map.iter_rules()):
+            continue
+        methods = sorted((rule.methods or set()) - {"HEAD", "OPTIONS"})
+        try:
+            app.add_url_rule(
+                rule.rule,
+                endpoint=short,
+                view_func=app.view_functions[short],
+                methods=methods or None,
+            )
+        except Exception:
+            # Duplicate / conflicting rules are fine to skip
+            pass
+
 
 def rebind_all() -> None:
     """Refresh blueprint globals after runtime_store / schedulers are created."""

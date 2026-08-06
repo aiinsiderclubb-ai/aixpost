@@ -104,7 +104,7 @@ body { visibility: hidden; }
 
     <ul class="nav-links">
       <li class="nav-item {% if request.endpoint=='dashboard' %}active{% endif %}">
-        <a href="{{ url_for('dashboard') }}"><i class="bi bi-grid-1x2-fill"></i><span>Dashboard</span></a>
+        <a href="{{ url_for('pages.dashboard') }}"><i class="bi bi-grid-1x2-fill"></i><span>Dashboard</span></a>
       </li>
       <li class="nav-item {% if request.endpoint=='accounts_page' %}active{% endif %}">
         <a href="{{ url_for('accounts_page') }}"><i class="bi bi-person-badge-fill"></i><span>Accounts</span></a>

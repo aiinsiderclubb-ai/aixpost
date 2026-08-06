@@ -510,7 +510,7 @@ def telegram_page():
         
     except Exception as e:
         logger.error(f"Telegram page error: {e}")
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('pages.dashboard'))
 
 @bp.route('/guide')
 @jwt_required()
@@ -527,7 +527,7 @@ def guide_page():
         
     except Exception as e:
         logger.error(f"Guide page error: {e}")
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('pages.dashboard'))
 
 @bp.route('/plans')
 @jwt_required()

@@ -36,11 +36,12 @@ Optional: <code>/schedule 09:30 max=5 | Hello</code>
 
 <code>/jobs</code> — list scheduled jobs
 <code>/cancel ID</code> — cancel a job
-<code>/status</code> — accounts / cooldown
+<code>/status</code> / <code>/accounts</code> — accounts &amp; cooldown
 <code>/limits</code> — effective caps + warm-up
 <code>/help</code> — this message
 
-Connect Chat ID on the Telegram page in the dashboard first."""
+Add Facebook accounts in the dashboard:
+https://aixpost.onrender.com/accounts"""
 
 _UPDATE_OFFSET = None
 _POLL_THREAD: Optional[threading.Thread] = None
@@ -212,7 +213,11 @@ def _status_text(user_id: int) -> str:
     orch = AccountOrchestrator(runtime_store)
     rows = orch.list_account_trust(user_id)
     if not rows:
-        return "No accounts yet. Add one on /accounts."
+        return (
+            "No Facebook accounts yet.\n"
+            "Add one here: https://aixpost.onrender.com/accounts\n"
+            "(Prepare → Trusted, then you can /schedule)"
+        )
     lines = ["<b>Accounts</b>"]
     for a in rows:
         warm = " · warm-up" if a.get("warmup") else ""
@@ -275,7 +280,7 @@ def handle_message(chat_id: str, text: str) -> str:
     if lower.startswith("/start") or lower.startswith("/help"):
         return _HELP
 
-    if lower.startswith("/status"):
+    if lower.startswith("/status") or lower.startswith("/accounts"):
         return _status_text(user_id)
 
     if lower.startswith("/limits"):

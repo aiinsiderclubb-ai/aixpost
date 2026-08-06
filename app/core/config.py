@@ -14,13 +14,34 @@ class AppConfig:
         "RUNTIME_DB_PATH",
         str(PROJECT_ROOT / "platform_runtime.db"),
     )
+    # When set (postgres://...), RuntimeStore uses Postgres for multi-host web/worker.
+    # Falls back to DATABASE_URL if RUNTIME_USE_APP_DB=true; otherwise SQLite file.
+    RUNTIME_DATABASE_URL = (os.environ.get("RUNTIME_DATABASE_URL") or "").strip()
+    RUNTIME_USE_APP_DB = os.environ.get("RUNTIME_USE_APP_DB", "true").lower() in ("1", "true", "yes")
     APP_SQLITE_PATH = os.environ.get("APP_SQLITE_PATH", str(PROJECT_ROOT / "test_app.db"))
+    DATABASE_URL = (os.environ.get("DATABASE_URL") or "").strip()
     CONFIG_INI_PATH = os.environ.get("CONFIG_INI_PATH", str(PROJECT_ROOT / "config.ini"))
 
     DEFAULT_HOURLY_POST_LIMIT = int(os.environ.get("DEFAULT_HOURLY_POST_LIMIT", "15"))
     DEFAULT_DAILY_POST_LIMIT = int(os.environ.get("DEFAULT_DAILY_POST_LIMIT", "80"))
     ACCOUNT_COOLDOWN_MINUTES = int(os.environ.get("ACCOUNT_COOLDOWN_MINUTES", "30"))
     MAX_CONSECUTIVE_FAILURES = int(os.environ.get("MAX_CONSECUTIVE_FAILURES", "3"))
+
+    @classmethod
+    def sqlalchemy_database_uri(cls) -> str:
+        """Postgres when DATABASE_URL is set; otherwise local SQLite."""
+        if cls.DATABASE_URL:
+            return cls.DATABASE_URL
+        return "sqlite:///" + cls.APP_SQLITE_PATH
+
+    @classmethod
+    def runtime_database_url(cls) -> str:
+        """Postgres URL for RuntimeStore, or empty string to use SQLite RUNTIME_DB_PATH."""
+        if cls.RUNTIME_DATABASE_URL:
+            return cls.RUNTIME_DATABASE_URL
+        if cls.RUNTIME_USE_APP_DB and cls.DATABASE_URL and cls.DATABASE_URL.startswith("postgres"):
+            return cls.DATABASE_URL
+        return ""
 
     @classmethod
     def get_fernet_key(cls) -> str:

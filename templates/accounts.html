@@ -144,7 +144,7 @@ function trustBadge(t){
 
 function renderPrepare(d){
   var status = d.status || 'idle';
-  document.getElementById('prepare-pill').textContent = status === 'waiting_manual' ? 'CAPTCHA' : status;
+  document.getElementById('prepare-pill').textContent = status === 'waiting_manual' ? '2FA/CAPTCHA' : status;
   document.getElementById('prepare-pill').className = 'badge ' + (
     status==='trusted'||status==='completed' ? 'bg-success' :
     status==='waiting_manual' ? 'bg-warning text-dark' :
@@ -155,7 +155,7 @@ function renderPrepare(d){
   var msg = document.getElementById('prepare-msg');
   var err = document.getElementById('prepare-err');
   if(status==='waiting_manual'){
-    msg.textContent = d.message || 'Пройдите CAPTCHA в Chrome, затем нажмите «Я прошёл CAPTCHA».';
+    msg.textContent = d.message || 'Пройдите CAPTCHA/2FA в Chrome, затем нажмите «Я прошёл CAPTCHA».';
     msg.classList.remove('d-none');
   } else { msg.classList.add('d-none'); }
   if(d.error){ err.textContent=d.error; err.classList.remove('d-none'); }

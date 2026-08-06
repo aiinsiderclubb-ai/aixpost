@@ -1,3 +1,10 @@
+# OUTDATED — see root README.md for the current stack.
+
+> This file claimed Celery/Stripe/React “production-ready” SaaS. That stack was never the live runtime.
+> Live app: `run_test_v2.py`, optional RQ, Jinja UI, admin-managed plans (no Stripe).
+
+---
+
 # 🚀 AIPostX - Production Ready SaaS Platform
 
 ## 📋 Overview

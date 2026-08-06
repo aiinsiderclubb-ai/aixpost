@@ -1,1 +1,1 @@
-"""Application services package."""
+"""AIPostX application package."""

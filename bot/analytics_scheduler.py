@@ -1,9 +1,11 @@
 """
 Analytics Scheduler
-Handles scheduled collection of post performance metrics via facebook-scraper.
+Handles scheduled collection of post performance metrics via facebook-scraper
+and daily Telegram digests.
 """
 
 import logging
+import os
 import threading
 import time
 from typing import Optional
@@ -25,6 +27,7 @@ class AnalyticsScheduler:
         self.scheduler_thread = None
         self._cookies_provider = None
         self._job_queue = None
+        self._digest_recipients_provider = None
 
     def set_cookies_provider(self, provider) -> None:
         """Optional callable returning Selenium/browser cookies for authenticated scraping."""
@@ -34,6 +37,10 @@ class AnalyticsScheduler:
         """Optional RQ queue for analytics collection workers."""
         self._job_queue = queue
 
+    def set_digest_recipients_provider(self, provider) -> None:
+        """Optional callable returning [{user_id, chat_id, label}] for daily digests."""
+        self._digest_recipients_provider = provider
+
     def start(self):
         if self.running:
             logger.warning("Analytics scheduler is already running")
@@ -42,11 +49,13 @@ class AnalyticsScheduler:
         self.running = True
         schedule.every(10).minutes.do(self._dispatch_collection)
         schedule.every().day.at("10:00").do(self._calculate_recommendations)
+        digest_at = (os.environ.get("TELEGRAM_DIGEST_AT") or "20:00").strip() or "20:00"
+        schedule.every().day.at(digest_at).do(self._send_daily_digests)
 
         self.scheduler_thread = threading.Thread(target=self._run_scheduler, daemon=True, name="analytics-scheduler")
         self.scheduler_thread.start()
         backend = "rq" if AppConfig.USE_RQ_WORKERS and self._job_queue else "in-process"
-        logger.info("Analytics scheduler started (backend=%s)", backend)
+        logger.info("Analytics scheduler started (backend=%s, digest_at=%s)", backend, digest_at)
 
     def stop(self):
         self.running = False
@@ -91,12 +100,34 @@ class AnalyticsScheduler:
         except Exception as exc:
             logger.error("Error calculating recommendations: %s", exc)
 
+    def _send_daily_digests(self):
+        try:
+            from bot.telegram_reports import send_daily_digests
+
+            recipients = []
+            if self._digest_recipients_provider:
+                recipients = list(self._digest_recipients_provider() or [])
+            if not recipients:
+                logger.info("Daily digest skipped: no recipients configured")
+                return
+            result = send_daily_digests(recipients)
+            logger.info(
+                "Daily digests sent=%s skipped=%s failed=%s",
+                result.get("sent"),
+                result.get("skipped"),
+                result.get("failed"),
+            )
+        except Exception as exc:
+            logger.error("Error sending daily digests: %s", exc)
+
     def force_analytics_check(self, check_type: str = None):
         try:
             if not check_type or check_type in ("1h", "24h", "7d", "all"):
                 self._dispatch_collection()
             if not check_type or check_type == "recommendations":
                 self._calculate_recommendations()
+            if check_type == "digest":
+                self._send_daily_digests()
         except Exception as exc:
             logger.error("Error in force analytics check: %s", exc)
 

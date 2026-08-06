@@ -3,6 +3,8 @@ Facebook Group Poster Bot - Main Module
 Handles automated posting to Facebook groups using Selenium
 """
 
+from __future__ import annotations
+
 import os
 import time
 import random
@@ -79,6 +81,7 @@ class FacebookGroupPoster:
         self.error = None
         self.waiting_for_2fa = False
         self.manual_verification_needed = False
+        self._force_visible_pending = False
         self.posts_completed = 0
         self.posts_failed = 0
         self.groups_total = 0
@@ -437,8 +440,48 @@ class FacebookGroupPoster:
         self.manual_verification_needed = True
         self.waiting_for_2fa = status == "need_2fa"
         self.error = reason
-        self._set_runtime_status("Waiting for 2FA" if status == "need_2fa" else "Waiting for manual verification", reason)
+        label = {
+            "need_2fa": "2FA",
+            "checkpoint": "Checkpoint",
+            "captcha": "CAPTCHA",
+        }.get(status, "Verification")
+        self._set_runtime_status(
+            "Waiting for 2FA" if status == "need_2fa" else "Waiting for manual verification",
+            reason,
+        )
         self._emit_session_state(status, reason)
+        try:
+            from .telegram_reports import format_verification_alert
+            msg = format_verification_alert(
+                status=status,
+                reason=reason,
+                headless=bool(self.headless),
+            )
+            self.send_telegram_notification(msg, error_level=True)
+        except Exception as tg_err:
+            self.log_action(f"Telegram verification alert skipped: {tg_err}", "warning")
+        if self.headless:
+            self.log_action(
+                f"⚠️ {label} while headless — will retry with a visible Chrome window",
+                "warning",
+            )
+            self._force_visible_pending = True
+
+    def force_visible_browser(self) -> bool:
+        """Restart Chrome with a visible window (required for CAPTCHA/2FA)."""
+        self.headless = False
+        self._force_visible_pending = False
+        self.login_attempts = 0
+        self.login_in_progress = False
+        self.log_action("🔄 Restarting Chrome in visible mode for manual verification")
+        try:
+            self.cleanup()
+        except Exception:
+            pass
+        time.sleep(1)
+        if self.use_profile:
+            return bool(self.setup_driver_with_profile(self.profile_dir))
+        return bool(self.setup_driver())
     
     def log_action(self, message, level='info'):
         """Log actions with appropriate level"""
@@ -610,57 +653,47 @@ class FacebookGroupPoster:
         pass
     
     def send_session_complete_notification(self, use_templates=False):
-        """
-        Отправка итогового уведомления по завершению сессии постинга с поддержкой шаблонов
-        """
+        """Send a structured end-of-session Telegram report."""
         if not self.session_start_time:
             return
-            
-        # Вычисляем время выполнения
+
         elapsed_time = datetime.now() - self.session_start_time
         total_minutes = int(elapsed_time.total_seconds() // 60)
-        
-        # Формируем статистику
-        total_processed = self.success_count + self.error_count
-        
-        # Определяем эмодзи в зависимости от результата
-        if self.error_count == 0:
-            status_emoji = "🎉"
-            status_text = "Все посты отправлены успешно!"
-        elif self.success_count > self.error_count:
-            status_emoji = "✅"
-            status_text = "Постинг завершён (есть ошибки)"
-        else:
-            status_emoji = "⚠️"
-            status_text = "Постинг завершён (много ошибок)"
-        
-        # Добавляем информацию о перезапусках сессии
-        restart_info = ""
-        if hasattr(self, 'session_restarts') and self.session_restarts > 0:
-            restart_info = f"\n🔄 Перезапусков сессии: <b>{self.session_restarts}</b>"
-        
-        # Добавляем информацию о шаблонах
-        template_info = ""
-        if use_templates and hasattr(self, 'template_manager') and self.template_manager:
-            template_count = len(self.template_manager.templates)
-            template_mode = getattr(self, 'template_mode', 'random')
-            template_info = f"\n🧠 <b>Шаблоны:</b> {template_count} шаблонов ({template_mode} режим)"
-            
-            # Добавляем статистику о последнем использованном шаблоне
-            if hasattr(self.template_manager, 'current_template_index') and self.template_manager.current_template_index is not None:
-                last_template = self.template_manager.templates[self.template_manager.current_template_index]
-                template_info += f"\n📄 Последний: <code>{last_template[:40]}{'...' if len(last_template) > 40 else ''}</code>"
-        
-        message = (
-            f"{status_emoji} <b>{status_text}</b>\n\n"
-            f"📊 <b>Статистика:</b>\n"
-            f"✅ Успешно: <b>{self.success_count}</b>\n"
-            f"❌ Ошибок: <b>{self.error_count}</b>\n"
-            f"📝 Всего обработано: <b>{total_processed}</b>\n"
-            f"⏱ Время выполнения: <b>{total_minutes} мин</b>{restart_info}{template_info}"
+        template_count = 0
+        template_mode = getattr(self, 'template_mode', 'random')
+        if use_templates and getattr(self, 'template_manager', None):
+            try:
+                template_count = len(self.template_manager.templates)
+            except Exception:
+                template_count = 0
+
+        failed_samples = []
+        try:
+            for url, status in (getattr(self, 'group_statuses', {}) or {}).items():
+                state = (status or {}).get('status') if isinstance(status, dict) else status
+                if str(state).lower() in ('failed', 'error', 'fail'):
+                    reason = ''
+                    if isinstance(status, dict):
+                        reason = status.get('error') or status.get('error_reason') or ''
+                    failed_samples.append((self.extract_group_name(url), reason or 'failed'))
+        except Exception:
+            failed_samples = []
+
+        from .telegram_reports import format_session_report
+        message = format_session_report(
+            success=self.success_count,
+            failed=self.error_count,
+            total_groups=self.groups_total or (self.success_count + self.error_count),
+            elapsed_minutes=total_minutes,
+            session_restarts=getattr(self, 'session_restarts', 0) or 0,
+            use_templates=bool(use_templates),
+            template_mode=template_mode,
+            template_count=template_count,
+            failed_samples=failed_samples[:5],
+            campaign_name=getattr(self, 'campaign_name', '') or '',
+            account_label=getattr(self, 'account_label', '') or '',
         )
-        
-        self.send_telegram_notification(message, error_level=False)
+        self.send_telegram_notification(message, error_level=(self.error_count > self.success_count))
     
     def extract_group_name(self, group_url):
         """
@@ -2239,76 +2272,80 @@ class FacebookGroupPoster:
                 
                 # Wait a bit more for the button to become active after text input
                 time.sleep(2)
-                
+
+                # Prefer shared SelectorEngine publish selectors, then legacy inline list.
+                post_button_selectors = []
+                publish_clicked = False
+                try:
+                    from .selector_engine import SelectorEngine
+                    engine = SelectorEngine(self.driver, self.logger)
+                    engine_selectors = SelectorEngine.publish_button_selectors()
+                    post_button_selectors.extend(engine_selectors)
+                    clicked = engine.find_and_click_xpath(
+                        engine_selectors,
+                        wait_seconds=8,
+                        safe_operation=self.safe_driver_operation,
+                    )
+                    if clicked is not None:
+                        post_button = clicked
+                        publish_clicked = True
+                        self.log_action("Post button clicked via SelectorEngine.publish_button_selectors")
+                        time.sleep(4)
+                except Exception as engine_err:
+                    self.log_action(f"SelectorEngine publish skipped: {engine_err}", 'warning')
+
                 # More robust selectors for the post button - multiple languages support
-                post_button_selectors = [
-                    # Dialog-specific post buttons with text matching - Russian first (including "Отправить")
+                legacy_publish_selectors = [
                     "//div[@role='dialog']//div[@role='button'][.//span[contains(text(), 'Отправить')]]",
                     "//div[@role='dialog']//div[@role='button'][.//span[contains(text(), 'Опубликовать')]]",
                     "//div[@role='dialog']//div[@role='button'][.//span[contains(text(), 'Поделиться')]]",
                     "//div[@role='dialog']//div[@role='button'][.//span[text()='Post']]",
                     "//div[@role='dialog']//div[@role='button'][.//span[text()='Share']]",
-                    
-                    # Look for aria-label attributes - Russian first (including "Отправить")
                     "//div[@role='button' and contains(@aria-label, 'Отправить')]",
                     "//div[@role='button' and contains(@aria-label, 'Опубликовать')]",
                     "//div[@role='button' and contains(@aria-label, 'Поделиться')]",
                     "//div[@role='button' and @aria-label='Post']",
                     "//div[@role='button' and @aria-label='Share']",
-                    
-                    # Text-based search in multiple languages (including "Отправить")
                     "//span[contains(text(), 'Отправить')]//ancestor::div[@role='button'][1]",
                     "//span[contains(text(), 'Опубликовать')]//ancestor::div[@role='button'][1]",
                     "//span[contains(text(), 'Поделиться')]//ancestor::div[@role='button'][1]",
                     "//span[text()='Post']//ancestor::div[@role='button'][1]",
                     "//span[text()='Share']//ancestor::div[@role='button'][1]",
-                    
-                    # Search within composer or dialog areas
                     "//div[contains(@class, 'composer') or @role='dialog']//div[@role='button' and contains(@class, 'layerConfirm')]",
-                    
-                    # Generic submit buttons
                     "//div[@role='button' and @type='submit']",
                     "//button[@type='submit' or contains(@class, 'layerConfirm')]",
-                    
-                    # Facebook-specific class patterns
                     "//div[@role='button' and contains(@class, 'composerPostButton')]",
                     "//div[@role='button' and contains(@data-testid, 'react-composer-post-button')]",
-                    
-                    # Last resort: look for any button in dialogs
                     "//div[@role='dialog']//div[@role='button'][last()]"
                 ]
-                
-                for i, selector in enumerate(post_button_selectors):
-                    try:
-                        self.log_action(f"Trying post button selector {i+1}/{len(post_button_selectors)}")
-                        
-                        # Wait for button to be present and clickable
-                        post_button = WebDriverWait(self.driver, 8).until(
-                            EC.presence_of_element_located((By.XPATH, selector))
-                        )
-                        
-                        # Additional wait for button to become clickable
-                        WebDriverWait(self.driver, 3).until(
-                            EC.element_to_be_clickable((By.XPATH, selector))
-                        )
-                        
-                        # Verify button is enabled and visible
-                        if post_button.is_enabled() and post_button.is_displayed():
-                            self.log_action(f"Found post button using selector: {selector}")
-                            break
-                        else:
-                            self.log_action(f"Post button found but not enabled/visible with selector {i+1}")
+                for selector in legacy_publish_selectors:
+                    if selector not in post_button_selectors:
+                        post_button_selectors.append(selector)
+
+                if not publish_clicked and post_button is None:
+                    for i, selector in enumerate(post_button_selectors):
+                        try:
+                            self.log_action(f"Trying post button selector {i+1}/{len(post_button_selectors)}")
+                            post_button = WebDriverWait(self.driver, 8).until(
+                                EC.presence_of_element_located((By.XPATH, selector))
+                            )
+                            WebDriverWait(self.driver, 3).until(
+                                EC.element_to_be_clickable((By.XPATH, selector))
+                            )
+                            if post_button.is_enabled() and post_button.is_displayed():
+                                self.log_action(f"Found post button using selector: {selector}")
+                                break
                             post_button = None
+                        except (TimeoutException, NoSuchElementException) as e:
+                            self.log_action(f"Post button selector {i+1} failed: {type(e).__name__}")
                             continue
-                            
-                    except (TimeoutException, NoSuchElementException) as e:
-                        self.log_action(f"Post button selector {i+1} failed: {type(e).__name__}")
-                        continue
-                    except Exception as e:
-                        self.log_action(f"Unexpected error with post button selector {i+1}: {str(e)}")
-                        continue
-                    
-                if not post_button:
+                        except Exception as e:
+                            self.log_action(f"Unexpected error with post button selector {i+1}: {str(e)}")
+                            continue
+
+                if publish_clicked:
+                    pass
+                elif not post_button:
                     self.log_action("Could not find active post button", 'error')
                     self.take_screenshot(f"no_post_button_attempt_{attempt+1}")
                     
@@ -2485,15 +2522,29 @@ class FacebookGroupPoster:
                             except TimeoutException:
                                 continue
                                 
-                        # Method 3: Check if we're back to the group feed
+                        # Method 3: Check if we're back to the group feed — alone is not enough
                         if not posting_success:
                             try:
                                 # Look for feed elements that indicate we're back to the group page
                                 WebDriverWait(self.driver, 3).until(
                                     EC.presence_of_element_located((By.XPATH, "//div[@data-pagelet='GroupFeed']"))
                                 )
-                                posting_success = True
-                                self.log_action("✓ Returned to group feed - post likely successful")
+                                try:
+                                    from .post_link_extractor import extract_post_link_from_driver
+                                    feed_url, _ = extract_post_link_from_driver(self.driver, message, group_url)
+                                    if feed_url:
+                                        posting_success = True
+                                        self.log_action("✓ Group feed + permalink — post successful")
+                                    else:
+                                        self.log_action(
+                                            "Group feed visible but no permalink — treating as unsuccessful",
+                                            'warning',
+                                        )
+                                except Exception:
+                                    self.log_action(
+                                        "Group feed visible but permalink check failed — not counting as success",
+                                        'warning',
+                                    )
                             except TimeoutException:
                                 pass
                                 
@@ -2543,40 +2594,23 @@ class FacebookGroupPoster:
                     
                     return True
                 elif attempt == max_retries - 1:
-                    # On the last attempt, be more lenient
-                    self.log_action(f"? Posting to group {group_url} completed (status uncertain)")
-                    
-                    post_url = None
-                    post_id = None
-                    try:
-                        from .post_link_extractor import extract_post_link_from_driver
-                        post_url, post_id = extract_post_link_from_driver(self.driver, message, group_url)
-                    except Exception:
-                        pass
+                    # Do NOT treat uncertain posts as success — avoids inflated analytics/limits.
+                    self.log_action(
+                        f"✗ Posting to group {group_url} failed (status uncertain after {max_retries} attempts)",
+                        'error',
+                    )
                     if self.analytics_enabled and self.analytics_db:
                         try:
                             group_id = group_url.split('/')[-1].split('?')[0]
                             group_name = self.extract_group_name(group_url)
-                            template_id = getattr(self, 'current_template_id', None)
                             uid = getattr(self, 'user_id', None)
-                            self.analytics_db.save_post(
-                                group_id,
-                                group_name,
-                                group_url,
-                                message,
-                                template_id,
-                                uid,
-                                post_url=post_url,
-                                post_id=post_id,
-                            )
                             self.analytics_db.update_group_stats(
-                                group_id, True, group_name=group_name, group_url=group_url, user_id=uid or 0
+                                group_id, False, group_name=group_name, group_url=group_url, user_id=uid or 0
                             )
-                            self.log_action("Uncertain post saved to analytics database")
                         except Exception as e:
-                            self.log_action(f"Failed to save analytics: {e}", 'warning')
-                    
-                    return True  # Consider uncertain as success to avoid infinite retries
+                            self.log_action(f"Failed to save failure analytics: {e}", 'warning')
+                    self.send_error_notification(group_url, "Post status uncertain after retries")
+                    return False
                 else:
                     self.log_action("✗ Post submission uncertain, will retry")
                     time.sleep(retry_delay)
@@ -2722,11 +2756,21 @@ class FacebookGroupPoster:
                         self.stats['status'] = 'Error'
                         return False
         
-        # Login to Facebook
+        # Login to Facebook (retry once with visible Chrome if CAPTCHA/2FA blocked headless)
         if not self.login():
-            self.cleanup()
-            self.is_posting = False
-            return False
+            if getattr(self, "_force_visible_pending", False) or (
+                self.manual_verification_needed and self.headless
+            ):
+                if self.force_visible_browser() and self.login():
+                    pass
+                else:
+                    self.cleanup()
+                    self.is_posting = False
+                    return False
+            else:
+                self.cleanup()
+                self.is_posting = False
+                return False
             
         # Load groups
         groups = self.load_groups(groups_file)
@@ -3332,57 +3376,15 @@ class FacebookGroupPoster:
             return None 
 
     def send_batch_summary_notification(self, batch_num, batch_success, batch_failed, failed_groups, total_processed, total_groups):
-        """
-        Отправка сводки по батчу (каждые 10 групп)
-        
-        Args:
-            batch_num (int): Номер батча
-            batch_success (int): Количество успешных постов в батче
-            batch_failed (int): Количество неудачных постов в батче  
-            failed_groups (list): Список неудачных групп с причинами
-            total_processed (int): Общее количество обработанных групп
-            total_groups (int): Общее количество групп
-        """
-        # Формируем основное сообщение
-        if batch_failed == 0:
-            batch_emoji = "🎉"
-            batch_status = "Все успешно!"
-        elif batch_success > batch_failed:
-            batch_emoji = "✅"
-            batch_status = "Преимущественно успешно"
-        else:
-            batch_emoji = "⚠️"
-            batch_status = "Много ошибок"
-        
-        # Базовая информация о батче
-        message = (
-            f"{batch_emoji} <b>Сводка по батчу #{batch_num}</b>\n\n"
-            f"📊 <b>Результаты батча:</b>\n"
-            f"✅ Успешно: <b>{batch_success}</b>\n"
-            f"❌ Ошибок: <b>{batch_failed}</b>\n"
-            f"📈 <b>Общий прогресс:</b> {total_processed}/{total_groups}\n\n"
+        """Send structured batch summary every N groups."""
+        from .telegram_reports import format_batch_report
+        message = format_batch_report(
+            batch_num=batch_num,
+            batch_success=batch_success,
+            batch_failed=batch_failed,
+            total_processed=total_processed,
+            total_groups=total_groups,
+            failed_groups=failed_groups or [],
         )
-        
-        # Добавляем информацию о неудачных группах если есть
-        if failed_groups:
-            message += f"🚫 <b>Неудачные группы в этом батче:</b>\n"
-            for i, (group_name, error_reason) in enumerate(failed_groups[:5]):  # Показываем максимум 5
-                # Ограничиваем длину названия группы
-                if len(group_name) > 30:
-                    group_name = group_name[:27] + "..."
-                # Ограничиваем длину причины ошибки  
-                if len(error_reason) > 40:
-                    error_reason = error_reason[:37] + "..."
-                message += f"• <code>{group_name}</code>\n  <i>{error_reason}</i>\n"
-            
-            # Если неудачных групп больше 5, показываем количество
-            if len(failed_groups) > 5:
-                message += f"... и ещё <b>{len(failed_groups) - 5}</b> групп\n"
-        
-        # Добавляем процент успешности батча
-        batch_total = batch_success + batch_failed
-        if batch_total > 0:
-            success_rate = (batch_success / batch_total) * 100
-            message += f"\n🎯 <b>Успешность батча:</b> {success_rate:.1f}%"
-        
         self.send_telegram_notification(message, error_level=(batch_failed > batch_success))
+

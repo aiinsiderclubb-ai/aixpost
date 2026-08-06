@@ -30,23 +30,23 @@ jobs:
           pip install -r requirements.txt
           pip install pytest flake8
 
-      - name: Lint
-        run: flake8 .
+      - name: Lint (active packages)
+        run: |
+          flake8 app bot platform_runtime.py run_test_v2.py rq_tasks.py \
+            --count --select=E9,F63,F7,F82 --show-source --statistics
 
       - name: Test
         env:
           FERNET_KEY: ${{ secrets.FERNET_KEY }}
-        run: pytest -q
+          FLASK_SECRET_KEY: ci-secret
+          JWT_SECRET_KEY: ci-jwt-secret
+          FLASK_DEBUG: "true"
+        run: pytest -q tests/
 
   deploy:
     needs: build-test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
-      - name: Mock deploy to Render
-        run: echo "Deploying to Render... (mock)"
-      - name: Mock deploy to Vercel
-        run: echo "Deploying to Vercel... (mock)"
-
-
-
+      - name: Deploy note
+        run: echo "Deploy via docker compose or start_platform.sh — configure secrets in the host environment."

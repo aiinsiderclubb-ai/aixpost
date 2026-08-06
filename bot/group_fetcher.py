@@ -3,6 +3,8 @@ Facebook Group Fetcher - Premium SaaS Version
 Module to reliably fetch and extract a user's joined Facebook groups
 """
 
+from __future__ import annotations
+
 import os
 import json
 import time

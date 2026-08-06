@@ -85,7 +85,9 @@ body { visibility: hidden; }
   }
 }
 </style>
-{% block head %}{% endblock %}
+{% block head %}
+<meta name="csrf-token" content="{{ csrf_token() }}">
+{% endblock %}
 </head>
 <body class="theme-ready">
 <div class="app-container">
@@ -207,6 +209,37 @@ document.addEventListener('click', function(e) {
     setTimeout(() => ripple.remove(), 600);
   }
 });
+</script>
+<script>
+window.getCsrfToken = function() {
+  const meta = document.querySelector('meta[name="csrf-token"]');
+  return meta ? meta.getAttribute('content') : '';
+};
+window.apiFetch = function(url, options) {
+  const opts = Object.assign({ credentials: 'include' }, options || {});
+  const headers = Object.assign({}, opts.headers || {});
+  const method = (opts.method || 'GET').toUpperCase();
+  if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+    if (!headers['X-CSRFToken'] && !headers['X-CSRF-Token']) {
+      headers['X-CSRFToken'] = window.getCsrfToken();
+    }
+  }
+  opts.headers = headers;
+  return fetch(url, opts);
+};
+(function() {
+  const originalFetch = window.fetch.bind(window);
+  window.fetch = function(input, init) {
+    const opts = Object.assign({ credentials: 'include' }, init || {});
+    const headers = new Headers(opts.headers || {});
+    const method = (opts.method || 'GET').toUpperCase();
+    if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS' && !headers.has('X-CSRFToken') && !headers.has('X-CSRF-Token')) {
+      headers.set('X-CSRFToken', window.getCsrfToken());
+    }
+    opts.headers = headers;
+    return originalFetch(input, opts);
+  };
+})();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>

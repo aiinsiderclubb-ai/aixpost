@@ -227,7 +227,7 @@ function renderProgress(d){
   const statusLabel = document.getElementById('status-badge');
   const statusPill = document.getElementById('status-pill');
   const statusMap = {running:'status-running',completed:'status-running',failed:'status-error',idle:'status-idle',waiting_manual:'status-running'};
-  statusLabel.textContent = d.status === 'waiting_manual' ? 'CAPTCHA' : d.status;
+  statusLabel.textContent = d.status === 'waiting_manual' ? '2FA/CAPTCHA' : d.status;
   statusPill.className = 'status-badge ' + (statusMap[d.status] || 'status-idle');
   const stepText = d.message || d.step || 'Waiting for next fetch';
   document.getElementById('status-step').textContent = stepText;

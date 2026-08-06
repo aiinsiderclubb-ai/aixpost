@@ -4,15 +4,15 @@
 
 {% block content %}
 <div class="text-center mb-5">
-  <h2 class="fw-bold" style="background:linear-gradient(135deg,var(--text-primary),var(--accent-light));-webkit-background-clip:text;-webkit-text-fill-color:transparent">Choose Your Plan</h2>
-  <p style="color:var(--text-secondary)">Upgrade to unlock more groups, unlimited posting and priority support</p>
+  <h2 class="fw-bold" style="background:linear-gradient(135deg,var(--text-primary),var(--accent-light));-webkit-background-clip:text;-webkit-text-fill-color:transparent">Your Plan</h2>
+  <p style="color:var(--text-secondary)">Plan upgrades are managed by an administrator. Contact support to change your plan.</p>
 </div>
 
 <div class="row g-4 justify-content-center mb-5">
   {% set plans_data = plans if plans is defined else {
     'FREE':{'name':'FREE','price':'$0','price_period':'forever','color':'secondary','features':['Up to 50 groups','5 posts per day','Auto-scheduling','Analytics','Priority support'],'feature_status':[true,true,false,false,false],'button_text':'Current Plan','is_current':true},
-    'PLUS':{'name':'PLUS','price':'$29','price_period':'per month','color':'primary','features':['Up to 500 groups','50 posts per day','Auto-scheduling','Analytics','Priority support'],'feature_status':[true,true,true,true,false],'button_text':'Upgrade to PLUS','is_current':false},
-    'PREMIUM':{'name':'PREMIUM','price':'$79','price_period':'per month','color':'warning','features':['Unlimited groups','Unlimited posts','Auto-scheduling','Advanced analytics','Priority support'],'feature_status':[true,true,true,true,true],'button_text':'Upgrade to PREMIUM','is_current':false}
+    'PLUS':{'name':'PLUS','price':'$29','price_period':'per month','color':'primary','features':['Up to 500 groups','50 posts per day','Auto-scheduling','Analytics','Priority support'],'feature_status':[true,true,true,true,false],'button_text':'Contact admin to upgrade','is_current':false},
+    'PREMIUM':{'name':'PREMIUM','price':'$79','price_period':'per month','color':'warning','features':['Unlimited groups','Unlimited posts','Auto-scheduling','Advanced analytics','Priority support'],'feature_status':[true,true,true,true,true],'button_text':'Contact admin to upgrade','is_current':false}
   } %}
   {% for plan_key, plan in plans_data.items() %}
   <div class="col-md-4" style="max-width:360px">

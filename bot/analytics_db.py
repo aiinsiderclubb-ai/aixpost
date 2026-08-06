@@ -10,9 +10,13 @@ from typing import Any, Dict, List, Optional
 
 
 class _AnalyticsDB:
-    def __init__(self):
+    def __init__(self, db_path: Optional[str] = None):
         base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-        self.db_path = os.path.join(base_dir, "analytics.db")
+        self.db_path = db_path or os.path.join(base_dir, "analytics.db")
+        self._ensure_schema()
+
+    def init_database(self):
+        """Re-run schema ensure / legacy backfill (public API for tests)."""
         self._ensure_schema()
 
     @contextmanager
@@ -154,6 +158,14 @@ class _AnalyticsDB:
                 WHERE COALESCE(failed_posts, 0) = 0 AND COALESCE(total_failed_posts, 0) > 0
                 """
             )
+        # Mark rows without a real user as legacy (pre-multi-tenant imports).
+        conn.execute(
+            """
+            UPDATE post_analytics
+            SET is_legacy = 1
+            WHERE COALESCE(user_id, 0) = 0 AND COALESCE(is_legacy, 0) = 0
+            """
+        )
 
     def _group_success_expr(self) -> str:
         with self.connect() as conn:
@@ -614,6 +626,96 @@ class _AnalyticsDB:
             "avg_engagement_rate": (avg_engagement or 0) * 100,
         }
 
+    def get_daily_digest(self, user_id: int, day: Optional[str] = None) -> Dict[str, Any]:
+        """Aggregate posting + engagement stats for one calendar day (UTC)."""
+        uid = int(user_id)
+        day_key = day or datetime.utcnow().strftime("%Y-%m-%d")
+        day_start = f"{day_key}T00:00:00"
+        day_end = f"{day_key}T23:59:59.999999"
+        with self.connect() as conn:
+            posts = conn.execute(
+                """
+                SELECT COUNT(*) FROM post_analytics
+                WHERE user_id = ? AND is_legacy = 0 AND posted_at >= ? AND posted_at <= ?
+                """,
+                (uid, day_start, day_end),
+            ).fetchone()[0] or 0
+            groups = conn.execute(
+                """
+                SELECT COUNT(DISTINCT group_id) FROM post_analytics
+                WHERE user_id = ? AND is_legacy = 0 AND posted_at >= ? AND posted_at <= ?
+                """,
+                (uid, day_start, day_end),
+            ).fetchone()[0] or 0
+            engagement = conn.execute(
+                """
+                SELECT
+                    COALESCE(AVG(engagement_rate_24h), 0),
+                    COALESCE(SUM(CASE WHEN likes_24h > 0 THEN likes_24h ELSE likes_1h END), 0),
+                    COALESCE(SUM(CASE WHEN comments_24h > 0 THEN comments_24h ELSE comments_1h END), 0),
+                    COALESCE(SUM(CASE WHEN shares_24h > 0 THEN shares_24h ELSE shares_1h END), 0),
+                    COALESCE(AVG(performance_score), 0)
+                FROM post_analytics
+                WHERE user_id = ? AND is_legacy = 0 AND posted_at >= ? AND posted_at <= ?
+                """,
+                (uid, day_start, day_end),
+            ).fetchone()
+            top_groups = conn.execute(
+                """
+                SELECT group_name, group_url, COUNT(*) AS posts,
+                       AVG(engagement_rate_24h) AS eng,
+                       AVG(performance_score) AS score
+                FROM post_analytics
+                WHERE user_id = ? AND is_legacy = 0 AND posted_at >= ? AND posted_at <= ?
+                GROUP BY group_id
+                ORDER BY eng DESC, posts DESC
+                LIMIT 5
+                """,
+                (uid, day_start, day_end),
+            ).fetchall()
+            gp = conn.execute(
+                """
+                SELECT
+                    COALESCE(SUM(success_posts), 0),
+                    COALESCE(SUM(failed_posts), 0)
+                FROM group_performance
+                WHERE user_id = ?
+                """,
+                (uid,),
+            ).fetchone()
+            week_posts = conn.execute(
+                """
+                SELECT COUNT(*) FROM post_analytics
+                WHERE user_id = ? AND is_legacy = 0
+                  AND posted_at >= datetime('now', '-7 days')
+                """,
+                (uid,),
+            ).fetchone()[0] or 0
+        avg_eng = float(engagement[0] or 0)
+        return {
+            "day": day_key,
+            "posts_today": int(posts),
+            "groups_today": int(groups),
+            "avg_engagement_pct": round(avg_eng * 100, 1),
+            "likes": int(engagement[1] or 0),
+            "comments": int(engagement[2] or 0),
+            "shares": int(engagement[3] or 0),
+            "avg_score": round(float(engagement[4] or 0), 1),
+            "lifetime_success": int(gp[0] or 0) if gp else 0,
+            "lifetime_failed": int(gp[1] or 0) if gp else 0,
+            "posts_7d": int(week_posts),
+            "top_groups": [
+                {
+                    "name": row["group_name"] or "Group",
+                    "url": row["group_url"] or "",
+                    "posts": int(row["posts"] or 0),
+                    "engagement_pct": round(float(row["eng"] or 0) * 100, 1),
+                    "score": round(float(row["score"] or 0), 1),
+                }
+                for row in top_groups
+            ],
+        }
+
     def get_performance_data(self, days=7, user_id: Optional[int] = None):
         cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
         query = """
@@ -660,3 +762,6 @@ class _AnalyticsDB:
 
 
 analytics_db = _AnalyticsDB()
+
+# Public alias used by tests / older imports
+AnalyticsDB = _AnalyticsDB

@@ -3,13 +3,13 @@ version: '3.8'
 services:
   redis:
     image: redis:7-alpine
-    container_name: facebook_saas_redis
+    container_name: aipostx_redis
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     networks:
-      - facebook_saas_network
+      - aipostx_network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -17,49 +17,106 @@ services:
       retries: 5
     command: redis-server --appendonly yes
 
-  web:
-    image: python:3.11-slim
-    container_name: facebook_saas_web
+  postgres:
+    image: postgres:15-alpine
+    container_name: aipostx_postgres
     environment:
-      - FLASK_ENV=production
-      - FERNET_KEY=${FERNET_KEY}
-      - REDIS_URL=redis://redis:6379/0
-      - SECRET_KEY=dev-secret-key-change-in-production
-      - JWT_SECRET_KEY=dev-jwt-secret-key
+      POSTGRES_USER: ${POSTGRES_USER:-aipostx}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-aipostx}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - aipostx_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aipostx}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    container_name: aipostx_web
+    environment:
+      FLASK_ENV: production
+      FLASK_DEBUG: "false"
+      FERNET_KEY: ${FERNET_KEY:?FERNET_KEY is required}
+      FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:?FLASK_SECRET_KEY is required}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY is required}
+      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql://${POSTGRES_USER:-aipostx}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-aipostx}
+      RUNTIME_DB_PATH: /app/data/platform_runtime.db
+      RUNTIME_USE_APP_DB: "true"
+      USE_RQ_WORKERS: ${USE_RQ_WORKERS:-true}
+      PORT: "8080"
     ports:
       - "8080:8080"
     volumes:
-      - .:/app
+      - app_data:/app/user_data
+      - runtime_data:/app/data
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     networks:
-      - facebook_saas_network
-    working_dir: /app
-    command: bash -lc "pip install -r requirements.txt && pip install rq eventlet gunicorn && gunicorn -k eventlet -w 1 run_test_v2:app --bind 0.0.0.0:8080"
+      - aipostx_network
+    command: gunicorn -k eventlet -w 1 "run_test_v2:create_app()" --bind 0.0.0.0:8080
 
   worker:
-    image: python:3.11-slim
-    container_name: facebook_saas_worker
+    build: .
+    container_name: aipostx_worker
     environment:
-      - FLASK_ENV=production
-      - FERNET_KEY=${FERNET_KEY}
-      - REDIS_URL=redis://redis:6379/0
+      FLASK_ENV: production
+      FLASK_DEBUG: "false"
+      FERNET_KEY: ${FERNET_KEY:?FERNET_KEY is required}
+      FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:?FLASK_SECRET_KEY is required}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY is required}
+      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql://${POSTGRES_USER:-aipostx}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-aipostx}
+      RUNTIME_DB_PATH: /app/data/platform_runtime.db
+      RUNTIME_USE_APP_DB: "true"
+      USE_RQ_WORKERS: "true"
+      DISPLAY: ":99"
     volumes:
-      - .:/app
+      - app_data:/app/user_data
+      - runtime_data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - aipostx_network
+    command: bash -lc "Xvfb :99 -screen 0 1920x1080x24 & python -u rq_worker.py"
+
+  analytics-worker:
+    build: .
+    container_name: aipostx_analytics_worker
+    environment:
+      FLASK_ENV: production
+      FERNET_KEY: ${FERNET_KEY:?FERNET_KEY is required}
+      REDIS_URL: redis://redis:6379/0
+      USE_RQ_WORKERS: "true"
+    volumes:
+      - app_data:/app/user_data
+      - runtime_data:/app/data
     depends_on:
       redis:
         condition: service_healthy
     networks:
-      - facebook_saas_network
-    working_dir: /app
-    command: bash -lc "pip install -r requirements.txt && pip install rq && python -u rq_worker.py"
+      - aipostx_network
+    command: python -u rq_analytics_worker.py
 
 volumes:
   redis_data:
-    driver: local
+  postgres_data:
+  app_data:
+  runtime_data:
 
 networks:
-  facebook_saas_network:
+  aipostx_network:
     driver: bridge
-    name: facebook_saas_network 
+    name: aipostx_network

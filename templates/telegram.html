@@ -12,27 +12,31 @@
       <div class="card-body py-4">
         <div class="alert alert-info mb-4">
           <i class="bi bi-info-circle me-2"></i>
-          Connect Telegram to receive notifications when posting is done, or when errors occur.
+          Connect Telegram for posting reports, errors, 2FA/CAPTCHA alerts, and daily analytics digests.
         </div>
         <div class="mb-3">
           <label class="form-label">Bot Token</label>
           <input type="text" class="form-control font-mono" id="tg-token" placeholder="1234567890:AABBCCDDEEFFaabbccddeeff...">
-          <div class="form-text">Get from <a href="https://t.me/BotFather" target="_blank" style="color:var(--accent-cyan);text-decoration:none">@BotFather</a></div>
+          <div class="form-text">Get from <a href="https://t.me/BotFather" target="_blank" style="color:var(--accent-cyan);text-decoration:none">@BotFather</a>. Server uses <code>TELEGRAM_BOT_TOKEN</code> from env when set.</div>
         </div>
         <div class="mb-4">
           <label class="form-label">Chat ID</label>
           <input type="text" class="form-control font-mono" id="tg-chat" placeholder="Your Telegram Chat ID">
           <div class="form-text">Send <code>/start</code> to <a href="https://t.me/userinfobot" target="_blank" style="color:var(--accent-cyan);text-decoration:none">@userinfobot</a> to get your ID</div>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex flex-wrap gap-2">
           <button class="btn btn-primary flex-grow-1" onclick="saveTelegramSettings()">
             <i class="bi bi-save me-2"></i>Save Settings
           </button>
           <button class="btn btn-outline-info" onclick="testTelegram()">
             <i class="bi bi-send me-2"></i>Send Test
           </button>
+          <button class="btn btn-outline-secondary" onclick="sendDigest()">
+            <i class="bi bi-newspaper me-2"></i>Send Daily Digest
+          </button>
         </div>
         <div id="tg-status" class="mt-3"></div>
+        <pre id="tg-preview" class="mt-2 small d-none" style="white-space:pre-wrap;background:rgba(0,0,0,.25);padding:12px;border-radius:8px;max-height:240px;overflow:auto"></pre>
       </div>
     </div>
 
@@ -45,14 +49,21 @@
           <i class="bi bi-check-circle-fill fs-4" style="color:var(--accent-green)"></i>
           <div>
             <div class="fw-semibold small">Posting Complete</div>
-            <div style="font-size:.8rem;color:var(--text-muted)">Notified when bulk posting finishes with stats</div>
+            <div style="font-size:.8rem;color:var(--text-muted)">Session stats after bulk posting finishes</div>
           </div>
         </div>
         <div class="d-flex align-items-center gap-3 mb-3 p-3" style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.15);border-radius:var(--radius-sm)">
           <i class="bi bi-exclamation-triangle-fill fs-4" style="color:var(--accent-amber)"></i>
           <div>
-            <div class="fw-semibold small">Error Alerts</div>
-            <div style="font-size:.8rem;color:var(--text-muted)">Instant notification when something goes wrong</div>
+            <div class="fw-semibold small">Error &amp; 2FA Alerts</div>
+            <div style="font-size:.8rem;color:var(--text-muted)">CAPTCHA / checkpoint / 2FA — open visible Chrome and resume</div>
+          </div>
+        </div>
+        <div class="d-flex align-items-center gap-3 mb-3 p-3" style="background:rgba(6,182,212,.06);border:1px solid rgba(6,182,212,.15);border-radius:var(--radius-sm)">
+          <i class="bi bi-newspaper fs-4" style="color:var(--accent-cyan)"></i>
+          <div>
+            <div class="fw-semibold small">Daily Analytics Digest</div>
+            <div style="font-size:.8rem;color:var(--text-muted)">Posts, engagement, and success rate (scheduled + manual)</div>
           </div>
         </div>
         <div class="d-flex align-items-center gap-3 p-3" style="background:rgba(6,182,212,.06);border:1px solid rgba(6,182,212,.15);border-radius:var(--radius-sm)">
@@ -78,7 +89,7 @@ fetch('/api/telegram/settings').then(r=>r.json()).then(d=>{
 function saveTelegramSettings(){
   var token=document.getElementById('tg-token').value;
   var chat=document.getElementById('tg-chat').value;
-  if(!token||!chat){setStatus('warning','Please fill both fields.');return;}
+  if(!chat){setStatus('warning','Chat ID is required.');return;}
   fetch('/api/telegram/settings',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({bot_token:token,chat_id:chat})
   }).then(r=>r.json()).then(d=>{
@@ -88,8 +99,20 @@ function saveTelegramSettings(){
 
 function testTelegram(){
   fetch('/api/telegram/test',{method:'POST'}).then(r=>r.json()).then(d=>{
-    setStatus(d.error?'danger':'success',d.message||d.error);
+    setStatus(d.error||!d.success?'danger':'success',d.message||d.error);
   });
+}
+
+function sendDigest(){
+  var preview=document.getElementById('tg-preview');
+  preview.classList.add('d-none');
+  fetch('/api/telegram/digest',{method:'POST'}).then(r=>r.json()).then(d=>{
+    setStatus(d.error||!d.success?'danger':'success',d.message||d.error||'Digest sent');
+    if(d.preview){
+      preview.textContent=d.preview;
+      preview.classList.remove('d-none');
+    }
+  }).catch(function(){setStatus('danger','Failed to send digest');});
 }
 
 function setStatus(type,msg){

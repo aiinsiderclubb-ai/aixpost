@@ -224,7 +224,7 @@
           <div id="account-trust-badge" class="mt-2"></div>
           <div class="d-flex flex-wrap gap-2 mt-2">
             <a href="/accounts" class="btn btn-sm btn-outline-primary">Prepare on Accounts</a>
-            <button type="button" class="btn btn-sm btn-warning" id="btn-resume-captcha" style="display:none" onclick="resumeCaptchaFromPoster()">Я прошёл CAPTCHA</button>
+            <button type="button" class="btn btn-sm btn-warning" id="btn-resume-captcha" style="display:none" onclick="resumeCaptchaFromPoster()">Я прошёл проверку (CAPTCHA/2FA)</button>
           </div>
         </div>
         <div class="input-row">
@@ -283,10 +283,10 @@
           </div>
           <div style="display:flex;flex-direction:column;justify-content:flex-end;grid-column:1 / -1">
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">
-              <input type="checkbox" id="post-headless" checked style="width:16px;height:16px;accent-color:var(--color-primary,#6366f1)">
+              <input type="checkbox" id="post-headless" style="width:16px;height:16px;accent-color:var(--color-primary,#6366f1)">
               <span class="field-label" style="margin:0">Headless mode</span>
             </label>
-            <span style="font-size:.72rem;color:var(--color-text-tertiary,#6b7280);margin-top:3px">Chrome runs in background</span>
+            <span style="font-size:.72rem;color:var(--color-text-tertiary,#6b7280);margin-top:3px">Off by default — needed for first login / 2FA / CAPTCHA</span>
           </div>
         </div>
 

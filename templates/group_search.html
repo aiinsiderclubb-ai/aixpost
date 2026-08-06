@@ -204,7 +204,7 @@ function setFetchRunning(running){
 
 function renderProgress(d){
   var status = d.status || 'idle';
-  document.getElementById('status-pill').textContent = status === 'waiting_manual' ? 'CAPTCHA' : status;
+  document.getElementById('status-pill').textContent = status === 'waiting_manual' ? '2FA/CAPTCHA' : status;
   document.getElementById('status-pill').className = 'badge ' + (
     status === 'running' || status === 'waiting_manual' ? 'bg-warning text-dark' :
     status === 'completed' ? 'bg-success' :

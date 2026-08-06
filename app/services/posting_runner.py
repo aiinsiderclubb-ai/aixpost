@@ -118,6 +118,7 @@ def execute_posting_task(
                     "paused_account_id": int(account_id),
                     "suggested_account_id": int(next_acc["id"]) if next_acc else None,
                     "reason": reason or status,
+                    "verification": status,
                 }
                 runtime_store.update_task(
                     task_id,
@@ -126,6 +127,14 @@ def execute_posting_task(
                     result_json=meta,
                 )
                 _emit("account_rotation", meta)
+                _emit(
+                    "verification_required",
+                    {
+                        "status": status,
+                        "reason": reason or status,
+                        "message": "Complete CAPTCHA/2FA in visible Chrome, then Resume.",
+                    },
+                )
             except Exception:
                 pass
         if account_id and status in ("logged_in", "trusted"):

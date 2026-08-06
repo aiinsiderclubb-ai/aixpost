@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import os
 import sqlite3
@@ -13,34 +15,116 @@ def _utcnow_str() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+class _RuntimeConn:
+    """Thin DB adapter so call sites keep using conn.execute / lastrowid."""
+
+    def __init__(self, backend: str, raw):
+        self.backend = backend
+        self.raw = raw
+        if backend == "postgres":
+            import psycopg2.extras
+            self._cur = raw.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        else:
+            raw.row_factory = sqlite3.Row
+            self._cur = raw
+
+    def _sql(self, sql: str) -> str:
+        if self.backend == "postgres":
+            return sql.replace("?", "%s")
+        return sql
+
+    def execute(self, sql: str, params=None):
+        sql = self._sql(sql)
+        if self.backend == "postgres":
+            if params is None:
+                self._cur.execute(sql)
+            else:
+                self._cur.execute(sql, params)
+        else:
+            if params is None:
+                self._cur = self.raw.execute(sql)
+            else:
+                self._cur = self.raw.execute(sql, params)
+        return self
+
+    def fetchone(self):
+        return self._cur.fetchone()
+
+    def fetchall(self):
+        return self._cur.fetchall()
+
+    def executescript(self, script: str) -> None:
+        if self.backend == "postgres":
+            for stmt in script.split(";"):
+                stmt = stmt.strip()
+                if stmt:
+                    self._cur.execute(stmt)
+        else:
+            self.raw.executescript(script)
+
+    def cursor(self):
+        return self
+
+    def commit(self) -> None:
+        self.raw.commit()
+
+    def close(self) -> None:
+        if self.backend == "postgres":
+            try:
+                self._cur.close()
+            except Exception:
+                pass
+        self.raw.close()
+
+    @property
+    def lastrowid(self):
+        if self.backend == "postgres":
+            self._cur.execute("SELECT LASTVAL() AS id")
+            row = self._cur.fetchone()
+            return int(row["id"] if isinstance(row, dict) else row[0])
+        return self._cur.lastrowid
+
+    @property
+    def rowcount(self):
+        return getattr(self._cur, "rowcount", 0)
+
+
 class RuntimeStore:
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, database_url: str | None = None):
         self.db_path = db_path
+        self.database_url = (database_url or "").strip()
+        self.backend = "postgres" if self.database_url.startswith("postgres") else "sqlite"
         self._lock = threading.RLock()
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        if self.backend == "sqlite":
+            parent = os.path.dirname(self.db_path)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
         self.ensure_schema()
 
     @contextmanager
     def connect(self):
         with self._lock:
-            conn = sqlite3.connect(self.db_path, timeout=30)
-            conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA busy_timeout = 30000")
-            conn.execute("PRAGMA journal_mode = WAL")
-            conn.execute("PRAGMA synchronous = NORMAL")
+            if self.backend == "postgres":
+                import psycopg2
+                raw = psycopg2.connect(self.database_url)
+                conn = _RuntimeConn("postgres", raw)
+            else:
+                raw = sqlite3.connect(self.db_path, timeout=30)
+                conn = _RuntimeConn("sqlite", raw)
+                conn.execute("PRAGMA busy_timeout = 30000")
+                conn.execute("PRAGMA journal_mode = WAL")
+                conn.execute("PRAGMA synchronous = NORMAL")
             try:
                 yield conn
                 conn.commit()
             finally:
                 conn.close()
 
-    def ensure_schema(self) -> None:
-        with self.connect() as conn:
-            cur = conn.cursor()
-            cur.executescript(
-                """
+    def _schema_sql(self) -> str:
+        pk = "SERIAL PRIMARY KEY" if self.backend == "postgres" else "INTEGER PRIMARY KEY AUTOINCREMENT"
+        return f"""
                 CREATE TABLE IF NOT EXISTS facebook_accounts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id {pk},
                     user_id INTEGER NOT NULL,
                     label TEXT NOT NULL,
                     login_email TEXT NOT NULL,
@@ -60,7 +144,7 @@ class RuntimeStore:
                 );
 
                 CREATE TABLE IF NOT EXISTS facebook_sessions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id {pk},
                     user_id INTEGER NOT NULL,
                     account_id INTEGER,
                     status TEXT NOT NULL,
@@ -77,7 +161,7 @@ class RuntimeStore:
                 );
 
                 CREATE TABLE IF NOT EXISTS background_tasks (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id {pk},
                     user_id INTEGER NOT NULL,
                     task_type TEXT NOT NULL,
                     title TEXT NOT NULL,
@@ -100,7 +184,7 @@ class RuntimeStore:
                 );
 
                 CREATE TABLE IF NOT EXISTS task_events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id {pk},
                     task_id INTEGER NOT NULL,
                     level TEXT NOT NULL,
                     event_type TEXT NOT NULL,
@@ -110,7 +194,7 @@ class RuntimeStore:
                 );
 
                 CREATE TABLE IF NOT EXISTS task_group_statuses (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id {pk},
                     task_id INTEGER NOT NULL,
                     group_key TEXT NOT NULL,
                     group_url TEXT,
@@ -126,7 +210,7 @@ class RuntimeStore:
                 );
 
                 CREATE TABLE IF NOT EXISTS group_workspace (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id {pk},
                     user_id INTEGER NOT NULL,
                     group_url TEXT NOT NULL,
                     group_name TEXT,
@@ -143,7 +227,7 @@ class RuntimeStore:
                 );
 
                 CREATE TABLE IF NOT EXISTS saved_group_filters (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id {pk},
                     user_id INTEGER NOT NULL,
                     name TEXT NOT NULL,
                     config_json TEXT NOT NULL,
@@ -153,7 +237,7 @@ class RuntimeStore:
                 );
 
                 CREATE TABLE IF NOT EXISTS template_records (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id {pk},
                     user_id INTEGER NOT NULL,
                     content TEXT NOT NULL,
                     title TEXT,
@@ -171,7 +255,7 @@ class RuntimeStore:
                 );
 
                 CREATE TABLE IF NOT EXISTS account_post_log (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id {pk},
                     account_id INTEGER NOT NULL,
                     user_id INTEGER NOT NULL,
                     group_url TEXT,
@@ -179,11 +263,35 @@ class RuntimeStore:
                     posted_at TEXT NOT NULL
                 );
                 """
-            )
+
+    def ensure_schema(self) -> None:
+        with self.connect() as conn:
+            if self.backend == "postgres":
+                # psycopg2 execute() accepts one statement; split on semicolons.
+                for stmt in self._schema_sql().split(";"):
+                    stmt = stmt.strip()
+                    if stmt:
+                        conn.execute(stmt)
+            else:
+                conn.executescript(self._schema_sql())
             self._migrate_schema(conn)
 
-    def _migrate_schema(self, conn: sqlite3.Connection) -> None:
-        columns = {row[1] for row in conn.execute("PRAGMA table_info(facebook_accounts)").fetchall()}
+    def _table_columns(self, conn: _RuntimeConn, table: str) -> set[str]:
+        if self.backend == "postgres":
+            rows = conn.execute(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = current_schema() AND table_name = ?
+                """,
+                (table,),
+            ).fetchall()
+            return {(row["column_name"] if isinstance(row, dict) else row[0]).lower() for row in rows}
+        rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+        return {row[1] for row in rows}
+
+    def _migrate_schema(self, conn: _RuntimeConn) -> None:
+        columns = self._table_columns(conn, "facebook_accounts")
         migrations = {
             "health_score": "ALTER TABLE facebook_accounts ADD COLUMN health_score INTEGER DEFAULT 100",
             "consecutive_failures": "ALTER TABLE facebook_accounts ADD COLUMN consecutive_failures INTEGER DEFAULT 0",
@@ -192,7 +300,7 @@ class RuntimeStore:
         for column, sql in migrations.items():
             if column not in columns:
                 conn.execute(sql)
-        task_columns = {row[1] for row in conn.execute("PRAGMA table_info(background_tasks)").fetchall()}
+        task_columns = self._table_columns(conn, "background_tasks")
         task_migrations = {
             "requested_action": "ALTER TABLE background_tasks ADD COLUMN requested_action TEXT NOT NULL DEFAULT 'none'",
             "acknowledged_state": "ALTER TABLE background_tasks ADD COLUMN acknowledged_state TEXT NOT NULL DEFAULT 'queued'",

@@ -38,22 +38,38 @@ def _broadcast(user_id: int, event: str, data: dict) -> None:
 
 
 def _get_user_facebook_credentials(user_id: int) -> tuple[str, str]:
-    db_path = _get_db_path()
     cipher = _get_cipher()
-    with sqlite3.connect(db_path) as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT facebook_username, facebook_password FROM users WHERE id = ?", (user_id,))
-        row = cur.fetchone()
-        if not row:
-            raise RuntimeError(f"User {user_id} not found")
-        fb_user, fb_pass_enc = row[0] or "", row[1] or ""
-        fb_pass = ""
-        if fb_pass_enc:
-            try:
-                fb_pass = cipher.decrypt(fb_pass_enc.encode()).decode()
-            except Exception:
-                fb_pass = ""
-        return fb_user, fb_pass
+    db_url = (AppConfig.DATABASE_URL or "").strip()
+    row = None
+    if db_url.startswith("postgres"):
+        import psycopg2
+
+        with psycopg2.connect(db_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT facebook_username, facebook_password FROM users WHERE id = %s",
+                    (user_id,),
+                )
+                row = cur.fetchone()
+    else:
+        db_path = _get_db_path()
+        with sqlite3.connect(db_path) as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT facebook_username, facebook_password FROM users WHERE id = ?",
+                (user_id,),
+            )
+            row = cur.fetchone()
+    if not row:
+        raise RuntimeError(f"User {user_id} not found")
+    fb_user, fb_pass_enc = row[0] or "", row[1] or ""
+    fb_pass = ""
+    if fb_pass_enc:
+        try:
+            fb_pass = cipher.decrypt(fb_pass_enc.encode()).decode()
+        except Exception:
+            fb_pass = ""
+    return fb_user, fb_pass
 
 
 def run_fetch_task(user_id: int, headless: bool = True, use_session: bool = True) -> dict:

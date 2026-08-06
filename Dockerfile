@@ -35,11 +35,13 @@ RUN groupadd -r appuser && useradd -r -g appuser appuser \
     && chown -R appuser:appuser /app
 
 COPY . .
-RUN chown -R appuser:appuser /app
+RUN chmod +x /app/scripts/start_web.sh /app/scripts/start_worker.sh \
+    && chown -R appuser:appuser /app
 
-USER appuser
+# Chrome needs writable dirs; keep root for Xvfb on workers (override in web if needed).
+USER root
 
 EXPOSE 8080
 
-# Default: web. Override in compose for workers.
-CMD ["gunicorn", "-k", "eventlet", "-w", "1", "run_test_v2:create_app()", "--bind", "0.0.0.0:8080"]
+# Default: web. Override dockerCommand for workers.
+CMD ["bash", "/app/scripts/start_web.sh"]

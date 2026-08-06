@@ -8,10 +8,22 @@
   Новые аккаунты стартуют с безопасными лимитами; первые дни — warm-up.
 </p>
 <div class="alert alert-warning py-2 small mb-3">
-  <strong>Cloud / Render:</strong> Prepare запускает Chrome <em>на сервере</em>, который ты не видишь.
-  CAPTCHA/2FA там пройти нельзя — поэтому статус может висеть на <code>login</code>.
-  Для первого входа нужен Prepare на Mac (локально) или уже сохранённая сессия.
-  Ошибка WebSocket в консоли обычно шум: прогресс также обновляется через Refresh / poll.
+  <div class="d-flex flex-wrap gap-2 align-items-start justify-content-between">
+    <div>
+      <strong>Первый вход / CAPTCHA:</strong>
+      на Render Prepare не показывает Chrome. Открой Facebook в отдельном окне (проверка аккаунта у себя),
+      а <strong>Trusted для бота</strong> получи только через Prepare на Mac (локально).
+      WebSocket в консоли — обычно шум; прогресс также через Refresh.
+    </div>
+    <button type="button" class="btn btn-sm btn-outline-primary text-nowrap" onclick="openFacebookLogin()">
+      <i class="bi bi-box-arrow-up-right me-1"></i>Открыть Facebook
+    </button>
+  </div>
+  <ol class="mb-0 mt-2 ps-3">
+    <li>Нажми «Открыть Facebook» → войди / пройди 2FA в popup.</li>
+    <li>Это <em>не</em> сессия бота — только удобный вход в свой браузер.</li>
+    <li>Для автоматизации: локально на Mac → Prepare → зелёный Trusted.</li>
+  </ol>
 </div>
 
 <div class="card mb-4">
@@ -75,9 +87,12 @@
 
   <div class="col-lg-8">
     <div class="card h-100">
-      <div class="card-header d-flex justify-content-between align-items-center">
+      <div class="card-header d-flex justify-content-between align-items-center gap-2 flex-wrap">
         <span>Live prepare status</span>
-        <span class="badge bg-secondary" id="prepare-pill">idle</span>
+        <div class="d-flex gap-2 align-items-center">
+          <button type="button" class="btn btn-sm btn-outline-primary" onclick="openFacebookLogin()">Открыть Facebook</button>
+          <span class="badge bg-secondary" id="prepare-pill">idle</span>
+        </div>
       </div>
       <div class="card-body">
         <div class="small mb-2" id="prepare-step" style="color:var(--text-muted)">Ожидание</div>
@@ -86,6 +101,9 @@
         </div>
         <div id="prepare-msg" class="alert alert-info py-2 small d-none"></div>
         <div id="prepare-err" class="alert alert-danger py-2 small d-none"></div>
+        <p class="small mb-0 mt-2" style="color:var(--text-muted)">
+          Popup Facebook = твой браузер. Сессия бота создаётся только через Prepare (локально).
+        </p>
       </div>
     </div>
   </div>
@@ -140,6 +158,7 @@
           </td>
           <td class="d-flex flex-wrap gap-1">
             <button class="btn btn-sm btn-primary" onclick="prepareAccount({{ a.id }})">Prepare</button>
+            <button class="btn btn-sm btn-outline-primary" onclick="openFacebookLogin()">Facebook</button>
             <button class="btn btn-sm btn-outline-secondary" onclick="validateAccount({{ a.id }})">Validate</button>
             <button class="btn btn-sm btn-warning" onclick="resumeManual({{ a.id }})">Я прошёл CAPTCHA</button>
             {% if a.cooldown_until %}
@@ -159,6 +178,29 @@
 
 {% block scripts %}
 <script>
+function openFacebookLogin(email){
+  var url = 'https://www.facebook.com/login';
+  var w = 520, h = 720;
+  var left = Math.max(0, (screen.width - w) / 2);
+  var top = Math.max(0, (screen.height - h) / 2);
+  var win = window.open(
+    url,
+    'aipostx_fb_login',
+    'popup=yes,width='+w+',height='+h+',left='+left+',top='+top+',scrollbars=yes,resizable=yes'
+  );
+  if(!win){
+    // Popup blocked — fall back to new tab
+    window.open(url, '_blank', 'noopener,noreferrer');
+    return;
+  }
+  try { win.focus(); } catch(e) {}
+  var hint = document.getElementById('prepare-msg');
+  if(hint){
+    hint.textContent = 'Открыт Facebook login. Войди в popup — это твой браузер, не сессия бота. Trusted для бота: Prepare на Mac.';
+    hint.classList.remove('d-none');
+  }
+}
+
 function getToken(){ return (window.getAccessToken && window.getAccessToken()) || ''; }
 function authHeaders(){
   var h = {'Content-Type':'application/json'};
@@ -242,6 +284,7 @@ function accountRowHtml(a){
             <div style="color:var(--text-muted)">cfg ${a.hourly_limit||0}/${a.daily_limit||0}</div></td>
         <td class="d-flex flex-wrap gap-1">
           <button class="btn btn-sm btn-primary" onclick="prepareAccount(${a.id})">Prepare</button>
+          <button class="btn btn-sm btn-outline-primary" onclick="openFacebookLogin()">Facebook</button>
           <button class="btn btn-sm btn-outline-secondary" onclick="validateAccount(${a.id})">Validate</button>
           <button class="btn btn-sm btn-warning" onclick="resumeManual(${a.id})">Я прошёл CAPTCHA</button>
           ${clearBtn}

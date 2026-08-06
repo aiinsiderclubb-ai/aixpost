@@ -1864,12 +1864,22 @@ def create_app(test_config=None):
     if app.config.get('TESTING'):
         redis_conn = job_queue = analytics_queue = None
     else:
-        redis_conn = redis.from_url(app.config.get('REDIS_URL', REDIS_URL))
-        job_queue = Queue('default', connection=redis_conn)
-        analytics_queue = Queue('analytics', connection=redis_conn)
+        redis_url = app.config.get('REDIS_URL', REDIS_URL)
+        try:
+            redis_kwargs = {}
+            if str(redis_url).startswith("rediss://"):
+                redis_kwargs["ssl_cert_reqs"] = None
+            redis_conn = redis.from_url(redis_url, socket_connect_timeout=5, **redis_kwargs)
+            redis_conn.ping()
+            job_queue = Queue('default', connection=redis_conn)
+            analytics_queue = Queue('analytics', connection=redis_conn)
+            logger.info("Redis connected for RQ queues")
+        except Exception as redis_err:
+            logger.warning("Redis unavailable (%s) — falling back to local task threads", redis_err)
+            redis_conn = job_queue = analytics_queue = None
     task_dispatcher = TaskDispatcher(
         runtime_store, task_manager, job_queue=job_queue,
-        use_rq=False if app.config.get('TESTING') else None,
+        use_rq=False if app.config.get('TESTING') or job_queue is None else None,
     )
     from app.blueprints import register_blueprints, blueprint_view, rebind_all
     register_blueprints(app)

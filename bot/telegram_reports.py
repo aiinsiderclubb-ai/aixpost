@@ -30,6 +30,22 @@ def resolve_bot_token(explicit: Optional[str] = None) -> str:
         value = (os.environ.get(key) or "").strip()
         if value and value not in ("YOUR_BOT_TOKEN_HERE", "test_token_for_development"):
             return value
+    # Fallback: token saved in dashboard Telegram settings
+    try:
+        from run_test_v2 import TelegramSettings, app
+
+        with app.app_context():
+            rows = (
+                TelegramSettings.query.filter_by(is_active=True)
+                .order_by(TelegramSettings.updated_at.desc())
+                .all()
+            )
+            for row in rows:
+                value = (getattr(row, "bot_token", None) or "").strip()
+                if value and value not in ("YOUR_BOT_TOKEN_HERE", "test_token_for_development"):
+                    return value
+    except Exception:
+        pass
     return ""
 
 

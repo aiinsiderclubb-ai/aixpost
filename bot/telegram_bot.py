@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import threading
 import time
@@ -318,6 +319,26 @@ def handle_message(chat_id: str, text: str) -> str:
     return "Unknown command. Send /help"
 
 
+def handle_update_payload(update: dict) -> None:
+    """Process one Telegram Update (webhook or polling)."""
+    message = update.get("message") or update.get("edited_message") or {}
+    chat = message.get("chat") or {}
+    chat_id = str(chat.get("id") or "")
+    text = message.get("text") or ""
+    if not chat_id or not text:
+        return
+    token = resolve_bot_token()
+    try:
+        reply = handle_message(chat_id, text)
+        send_telegram_html(chat_id, reply, bot_token=token)
+    except Exception as exc:
+        logger.exception("Telegram command failed: %s", exc)
+        try:
+            send_telegram_html(chat_id, f"Error: {exc}", bot_token=token)
+        except Exception:
+            pass
+
+
 def _api_get(token: str, method: str, params: Optional[dict] = None) -> dict:
     response = requests.get(
         f"https://api.telegram.org/bot{token}/{method}",
@@ -328,9 +349,74 @@ def _api_get(token: str, method: str, params: Optional[dict] = None) -> dict:
     return response.json()
 
 
+def _api_post(token: str, method: str, data: Optional[dict] = None) -> dict:
+    response = requests.post(
+        f"https://api.telegram.org/bot{token}/{method}",
+        data=data or {},
+        timeout=30,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def public_base_url() -> str:
+    for key in ("PUBLIC_BASE_URL", "RENDER_EXTERNAL_URL"):
+        value = (os.environ.get(key) or "").strip().rstrip("/")
+        if value:
+            return value
+    return "https://aixpost.onrender.com"
+
+
+def expected_webhook_secret() -> str:
+    import hashlib
+
+    token = resolve_bot_token()
+    if not token:
+        return (os.environ.get("TELEGRAM_WEBHOOK_SECRET") or "").strip()
+    raw = (os.environ.get("TELEGRAM_WEBHOOK_SECRET") or token).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()[:48]
+
+
+def webhook_secret_ok(provided: str) -> bool:
+    expected = expected_webhook_secret()
+    if not expected:
+        return True
+    return bool(provided) and provided == expected
+
+
+def register_telegram_webhook(token: Optional[str] = None) -> Dict[str, Any]:
+    tok = resolve_bot_token(token)
+    if not tok:
+        return {"ok": False, "error": "no token"}
+    secret = expected_webhook_secret()
+    url = f"{public_base_url()}/api/telegram/webhook"
+    try:
+        _api_post(tok, "deleteWebhook", {"drop_pending_updates": "false"})
+        result = _api_post(
+            tok,
+            "setWebhook",
+            {
+                "url": url,
+                "secret_token": secret,
+                "allowed_updates": json.dumps(["message", "edited_message"]),
+            },
+        )
+        ok = bool(result.get("ok"))
+        logger.info("Telegram webhook set url=%s ok=%s", url, ok)
+        return {"ok": ok, "mode": "webhook", "url": url, "raw": result}
+    except Exception as exc:
+        logger.warning("Telegram setWebhook failed: %s", exc)
+        return {"ok": False, "error": str(exc), "mode": "webhook"}
+
+
 def poll_loop(token: str) -> None:
     global _UPDATE_OFFSET
     logger.info("Telegram inbound bot polling started")
+    # Clear webhook so getUpdates works if webhook mode failed
+    try:
+        _api_post(token, "deleteWebhook", {"drop_pending_updates": "false"})
+    except Exception as exc:
+        logger.warning("deleteWebhook before poll failed: %s", exc)
     while not _STOP.is_set():
         try:
             params: Dict[str, Any] = {"timeout": 25}
@@ -342,36 +428,22 @@ def poll_loop(token: str) -> None:
                 continue
             for update in data.get("result") or []:
                 _UPDATE_OFFSET = int(update["update_id"]) + 1
-                message = update.get("message") or update.get("edited_message") or {}
-                chat = message.get("chat") or {}
-                chat_id = str(chat.get("id") or "")
-                text = message.get("text") or ""
-                if not chat_id or not text:
-                    continue
-                try:
-                    reply = handle_message(chat_id, text)
-                    send_telegram_html(chat_id, reply, bot_token=token)
-                except Exception as exc:
-                    logger.exception("Telegram command failed: %s", exc)
-                    try:
-                        send_telegram_html(chat_id, f"Error: {exc}", bot_token=token)
-                    except Exception:
-                        pass
+                handle_update_payload(update)
         except Exception as exc:
             logger.warning("Telegram poll error: %s", exc)
             time.sleep(5)
     logger.info("Telegram inbound bot polling stopped")
 
 
-def start_telegram_bot_polling() -> bool:
+def start_telegram_bot_polling(token: Optional[str] = None) -> bool:
     """Start long-poll thread if TELEGRAM_BOT_POLLING and token are set."""
     global _POLL_THREAD
     from app.core.config import AppConfig
 
     if not AppConfig.TELEGRAM_BOT_POLLING:
         return False
-    token = resolve_bot_token()
-    if not token or token == "test_token_for_development":
+    tok = resolve_bot_token(token)
+    if not tok or tok == "test_token_for_development":
         logger.info("Telegram bot polling skipped: no token")
         return False
     if _POLL_THREAD and _POLL_THREAD.is_alive():
@@ -379,7 +451,7 @@ def start_telegram_bot_polling() -> bool:
     _STOP.clear()
     _POLL_THREAD = threading.Thread(
         target=poll_loop,
-        args=(token,),
+        args=(tok,),
         name="telegram-bot-poll",
         daemon=True,
     )
@@ -389,3 +461,43 @@ def start_telegram_bot_polling() -> bool:
 
 def stop_telegram_bot_polling() -> None:
     _STOP.set()
+
+
+def activate_inbound_bot(prefer_token: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Prefer webhook (works on Render without a background poll thread).
+    Fall back to long-polling if webhook registration fails.
+    """
+    from app.core.config import AppConfig
+
+    tok = resolve_bot_token(prefer_token)
+    if not tok:
+        return {"ok": False, "error": "no bot token (save Bot Token in dashboard or set TELEGRAM_BOT_TOKEN)"}
+
+    # Always try webhook first on cloud hosts
+    use_webhook = (os.environ.get("TELEGRAM_USE_WEBHOOK", "true") or "true").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    webhook_result: Dict[str, Any] = {}
+    if use_webhook:
+        webhook_result = register_telegram_webhook(tok)
+        if webhook_result.get("ok"):
+            # Stop poll thread if it was running — webhook owns updates now
+            stop_telegram_bot_polling()
+            return webhook_result
+
+    if AppConfig.TELEGRAM_BOT_POLLING:
+        started = start_telegram_bot_polling(tok)
+        return {
+            "ok": started,
+            "mode": "polling",
+            "error": None if started else "failed to start polling",
+            "webhook_error": webhook_result.get("error"),
+        }
+    return {
+        "ok": False,
+        "error": "webhook failed and polling disabled",
+        "webhook": webhook_result or None,
+    }

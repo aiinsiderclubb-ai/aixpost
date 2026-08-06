@@ -1351,6 +1351,7 @@ class TelegramSettings(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, unique=True)
     chat_id = db.Column(db.String(255), nullable=False)
+    bot_token = db.Column(db.String(512), nullable=True)
     is_active = db.Column(db.Boolean, default=True)
     last_test_sent = db.Column(db.DateTime)
     test_successful = db.Column(db.Boolean, default=False)
@@ -1358,10 +1359,16 @@ class TelegramSettings(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def to_dict(self):
+        token = (self.bot_token or '').strip()
+        masked = ''
+        if token:
+            masked = (token[:6] + '…' + token[-4:]) if len(token) > 12 else '••••'
         return {
             'id': self.id,
             'user_id': self.user_id,
             'chat_id': self.chat_id,
+            'bot_token_set': bool(token),
+            'bot_token_masked': masked,
             'is_active': self.is_active,
             'last_test_sent': self.last_test_sent.isoformat() if self.last_test_sent else None,
             'test_successful': self.test_successful,
@@ -1889,6 +1896,7 @@ def create_app(test_config=None):
     csrf.exempt(blueprint_view('auth', 'login'))
     csrf.exempt(blueprint_view('auth', 'logout'))
     csrf.exempt(blueprint_view('infra', 'api_csrf_token'))
+    csrf.exempt(blueprint_view('telegram', 'telegram_webhook'))
     if not app.config.get('TESTING'):
         @app.before_request
         def _lazy_bootstrap_background():
@@ -1909,6 +1917,17 @@ def bootstrap_background_services():
     create_app()
     with app.app_context():
         db.create_all()
+        try:
+            from sqlalchemy import inspect, text
+            insp = inspect(db.engine)
+            cols = {c["name"] for c in insp.get_columns("telegram_settings")}
+            if "bot_token" not in cols:
+                db.session.execute(text("ALTER TABLE telegram_settings ADD COLUMN bot_token VARCHAR(512)"))
+                db.session.commit()
+                print("✅ Added telegram_settings.bot_token column")
+        except Exception as migrate_err:
+            db.session.rollback()
+            print(f"⚠️  telegram_settings.bot_token migrate skipped: {migrate_err}")
         runtime_store.mark_stale_tasks()
         runtime_store.cleanup_old_events()
         try:
@@ -1970,12 +1989,13 @@ def bootstrap_background_services():
     print("✅ Job scheduler initialized")
     print("✅ Database tables created successfully!")
     try:
-        from bot.telegram_bot import start_telegram_bot_polling
+        from bot.telegram_bot import activate_inbound_bot
 
-        if start_telegram_bot_polling():
-            print("✅ Telegram inbound bot polling started (/schedule, /jobs, …)")
+        result = activate_inbound_bot()
+        if result.get("ok"):
+            print(f"✅ Telegram inbound bot active ({result.get('mode')})")
         else:
-            print("ℹ️  Telegram inbound bot polling skipped (token/flag)")
+            print(f"ℹ️  Telegram inbound bot skipped: {result.get('error') or result}")
     except Exception as tg_bot_err:
         print(f"⚠️  Telegram inbound bot skipped: {tg_bot_err}")
     try:

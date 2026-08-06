@@ -22,7 +22,7 @@
         <div class="mb-4">
           <label class="form-label">Chat ID</label>
           <input type="text" class="form-control font-mono" id="tg-chat" placeholder="Your Telegram Chat ID">
-          <div class="form-text">Send <code>/start</code> to <a href="https://t.me/userinfobot" target="_blank" style="color:var(--accent-cyan);text-decoration:none">@userinfobot</a> to get your ID</div>
+          <div class="form-text">Send <code>/start</code> to <a href="https://t.me/userinfobot" target="_blank" style="color:var(--accent-cyan);text-decoration:none">@userinfobot</a> to get your ID. Commands like <code>/jobs</code> only work after both Token + Chat ID are saved.</div>
         </div>
         <div class="d-flex flex-wrap gap-2">
           <button class="btn btn-primary flex-grow-1" onclick="saveTelegramSettings()">
@@ -91,18 +91,26 @@
 {% block scripts %}
 <script>
 fetch('/api/telegram/settings').then(r=>r.json()).then(d=>{
-  if(d.bot_token)document.getElementById('tg-token').value=d.bot_token;
   if(d.chat_id)document.getElementById('tg-chat').value=d.chat_id;
+  else if(d.settings&&d.settings.chat_id)document.getElementById('tg-chat').value=d.settings.chat_id;
+  if(d.bot_token_set){
+    document.getElementById('tg-token').placeholder='Token saved ('+(d.bot_token_masked||'••••')+') — paste to replace';
+  }
 }).catch(()=>{});
 
 function saveTelegramSettings(){
-  var token=document.getElementById('tg-token').value;
-  var chat=document.getElementById('tg-chat').value;
+  var token=document.getElementById('tg-token').value.trim();
+  var chat=document.getElementById('tg-chat').value.trim();
   if(!chat){setStatus('warning','Chat ID is required.');return;}
+  var body={chat_id:chat};
+  if(token) body.bot_token=token;
   fetch('/api/telegram/settings',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({bot_token:token,chat_id:chat})
+    body:JSON.stringify(body)
   }).then(r=>r.json()).then(d=>{
-    setStatus(d.error?'danger':'success',d.message||d.error||'Saved!');
+    if(d.error){setStatus('danger',d.error);return;}
+    var inbound=d.inbound||{};
+    var extra=inbound.ok?(' · inbound: '+(inbound.mode||'on')):(' · inbound: '+(inbound.error||'not active — paste Bot Token'));
+    setStatus('success',(d.message||'Saved!')+extra);
   });
 }
 

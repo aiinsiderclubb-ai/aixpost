@@ -66,12 +66,20 @@ def get_telegram_settings():
         if not settings:
             return jsonify({
                 'connected': False,
-                'settings': None
+                'settings': None,
+                'bot_token': '',
+                'chat_id': '',
             }), 200
-        
+
+        payload = settings.to_dict()
         return jsonify({
             'connected': True,
-            'settings': settings.to_dict()
+            'settings': payload,
+            # Keep form fields filled for chat; never return full token.
+            'bot_token': '',
+            'bot_token_masked': payload.get('bot_token_masked') or '',
+            'bot_token_set': payload.get('bot_token_set'),
+            'chat_id': settings.chat_id,
         }), 200
         
     except Exception as e:
@@ -84,9 +92,10 @@ def save_telegram_settings():
     """Save user's Telegram settings"""
     try:
         user_id = get_jwt_identity()
-        data = request.get_json()
+        data = request.get_json() or {}
         
-        chat_id = data.get('chat_id', '').strip()
+        chat_id = (data.get('chat_id') or '').strip()
+        bot_token = (data.get('bot_token') or '').strip()
         if not chat_id:
             return jsonify({'error': 'Chat ID is required'}), 400
         
@@ -99,21 +108,37 @@ def save_telegram_settings():
             settings.chat_id = chat_id
             settings.is_active = True
             settings.updated_at = datetime.utcnow()
+            if bot_token:
+                settings.bot_token = bot_token
         else:
+            if not bot_token:
+                return jsonify({
+                    'error': 'Bot Token is required for the first connection (or set TELEGRAM_BOT_TOKEN on the server)',
+                }), 400
             settings = TelegramSettings(
                 user_id=user_id,
                 chat_id=chat_id,
+                bot_token=bot_token,
                 is_active=True
             )
             db.session.add(settings)
         
         db.session.commit()
+
+        inbound = {}
+        try:
+            from bot.telegram_bot import activate_inbound_bot
+            inbound = activate_inbound_bot(prefer_token=(settings.bot_token or None))
+        except Exception as activate_err:
+            logger.warning("Telegram inbound activate failed: %s", activate_err)
+            inbound = {'ok': False, 'error': str(activate_err)}
         
         logger.info(f"Telegram settings saved for user {user_id}")
         
         return jsonify({
             'message': 'Telegram settings saved successfully',
-            'settings': settings.to_dict()
+            'settings': settings.to_dict(),
+            'inbound': inbound,
         }), 200
         
     except Exception as e:
@@ -140,11 +165,14 @@ def test_telegram_connection():
             f"You will receive notifications about:\n"
             f"• Campaign completions\n"
             f"• Posting results\n"
-            f"• System alerts\n\n"
-            f"📱 AIPostX SaaS"
+            f"• System alerts\n"
+            f"• Schedule commands (/schedule, /jobs)\n\n"
+            f"📱 AIPostX"
         )
-        
-        success = send_telegram_message(settings.chat_id, test_message)
+
+        from bot.telegram_reports import send_telegram_html, resolve_bot_token
+        token = resolve_bot_token(getattr(settings, 'bot_token', None))
+        success = send_telegram_html(settings.chat_id, test_message, bot_token=token)
         
         # Update settings
         settings.last_test_sent = datetime.utcnow()
@@ -159,7 +187,7 @@ def test_telegram_connection():
         else:
             return jsonify({
                 'success': False,
-                'message': 'Failed to send test message. Please check your chat ID.'
+                'message': 'Failed to send test message. Check Bot Token + Chat ID.'
             }), 400
         
     except Exception as e:
@@ -178,10 +206,11 @@ def send_telegram_digest_now():
         if not settings or not settings.chat_id:
             return jsonify({'error': 'Telegram not configured'}), 400
 
-        from bot.telegram_reports import build_daily_digest_for_user, send_telegram_html
+        from bot.telegram_reports import build_daily_digest_for_user, send_telegram_html, resolve_bot_token
         label = getattr(user, 'full_name', None) or (user.email if user else '')
         text = build_daily_digest_for_user(user_id, user_label=label or '')
-        ok = send_telegram_html(settings.chat_id, text, bot_token=TELEGRAM_BOT_TOKEN)
+        token = resolve_bot_token(getattr(settings, 'bot_token', None))
+        ok = send_telegram_html(settings.chat_id, text, bot_token=token)
         if not ok:
             return jsonify({'success': False, 'error': 'Failed to send digest'}), 500
         return jsonify({'success': True, 'message': 'Daily digest sent', 'preview': text}), 200
@@ -189,3 +218,23 @@ def send_telegram_digest_now():
         logger.error(f"Telegram digest error: {e}")
         return jsonify({'error': 'Failed to send digest'}), 500
 
+
+@bp.route('/api/telegram/webhook', methods=['POST'])
+def telegram_webhook():
+    """Inbound Telegram updates (set via setWebhook). No JWT — verified by shared secret header optional."""
+    try:
+        from bot.telegram_bot import handle_update_payload, webhook_secret_ok
+
+        secret = request.headers.get('X-Telegram-Bot-Api-Secret-Token') or request.args.get('secret') or ''
+        if not webhook_secret_ok(secret):
+            # Still accept when secret not configured yet (first boot), but log.
+            from bot.telegram_bot import expected_webhook_secret
+            if expected_webhook_secret():
+                return jsonify({'ok': False}), 403
+
+        payload = request.get_json(silent=True) or {}
+        handle_update_payload(payload)
+        return jsonify({'ok': True}), 200
+    except Exception as e:
+        logger.error("Telegram webhook error: %s", e)
+        return jsonify({'ok': False}), 200  # always 200 to avoid Telegram retries storms

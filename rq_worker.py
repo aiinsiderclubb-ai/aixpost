@@ -10,14 +10,15 @@ def main():
         kwargs['ssl_cert_reqs'] = None
     conn = redis.from_url(redis_url, **kwargs)
     conn.ping()
-    q = Queue('default', connection=conn)
-    # Use SimpleWorker to avoid fork() crashes with Chrome on macOS / Docker
-    print(f"RQ worker listening on queue=default redis={redis_url.split('@')[-1]}")
-    SimpleWorker([q], connection=conn).work()
+    names = [
+        n.strip()
+        for n in (os.environ.get('RQ_QUEUES') or 'default').split(',')
+        if n.strip()
+    ]
+    queues = [Queue(name, connection=conn) for name in names]
+    print(f"RQ worker listening on queues={names} redis={redis_url.split('@')[-1]}")
+    SimpleWorker(queues, connection=conn).work()
 
 
 if __name__ == '__main__':
     main()
-
-
-

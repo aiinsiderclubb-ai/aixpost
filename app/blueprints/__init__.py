@@ -32,6 +32,7 @@ _PROXY_NAMES = frozenset(
         "job_scheduler",
         "redis_conn",
         "job_queue",
+        "browser_queue",
         "analytics_queue",
         "poster_instances",
         "_start_local_posting_thread",

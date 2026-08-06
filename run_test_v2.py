@@ -221,6 +221,7 @@ task_manager = None
 REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
 redis_conn = None
 job_queue = None
+browser_queue = None
 analytics_queue = None
 task_dispatcher = None
 
@@ -236,7 +237,8 @@ def apply_security_headers(response):
         "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
         "font-src 'self' https://cdn.jsdelivr.net; "
         "img-src 'self' data:; "
-        "connect-src 'self' ws: wss:; "
+        "connect-src 'self' ws: wss: https://*.onrender.com; "
+        "frame-src 'self' https://*.onrender.com; "
         "frame-ancestors 'none'"
     )
     return response
@@ -1834,7 +1836,7 @@ _background_started = False
 def create_app(test_config=None):
     """Bind extensions and runtime storage without starting background work."""
     global _app_initialized, runtime_store, task_manager
-    global redis_conn, job_queue, analytics_queue, task_dispatcher, RUNTIME_DB_PATH
+    global redis_conn, job_queue, browser_queue, analytics_queue, task_dispatcher, RUNTIME_DB_PATH
     if _app_initialized:
         if test_config:
             raise RuntimeError('create_app(test_config) must be the first initialization')
@@ -1869,7 +1871,7 @@ def create_app(test_config=None):
     runtime_store = RuntimeStore(RUNTIME_DB_PATH, database_url=runtime_url)
     task_manager = LocalTaskManager(runtime_store)
     if app.config.get('TESTING'):
-        redis_conn = job_queue = analytics_queue = None
+        redis_conn = job_queue = browser_queue = analytics_queue = None
     else:
         redis_url = app.config.get('REDIS_URL', REDIS_URL)
         try:
@@ -1879,11 +1881,12 @@ def create_app(test_config=None):
             redis_conn = redis.from_url(redis_url, socket_connect_timeout=5, **redis_kwargs)
             redis_conn.ping()
             job_queue = Queue('default', connection=redis_conn)
+            browser_queue = Queue('browser', connection=redis_conn)
             analytics_queue = Queue('analytics', connection=redis_conn)
             logger.info("Redis connected for RQ queues")
         except Exception as redis_err:
             logger.warning("Redis unavailable (%s) — falling back to local task threads", redis_err)
-            redis_conn = job_queue = analytics_queue = None
+            redis_conn = job_queue = browser_queue = analytics_queue = None
     task_dispatcher = TaskDispatcher(
         runtime_store, task_manager, job_queue=job_queue,
         use_rq=False if app.config.get('TESTING') or job_queue is None else None,

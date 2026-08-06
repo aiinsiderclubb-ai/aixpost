@@ -6,6 +6,8 @@ set -euo pipefail
 
 export DISPLAY="${DISPLAY:-:99}"
 export USE_RQ_WORKERS="${USE_RQ_WORKERS:-true}"
+# Prepare goes to "browser"; keep default too so one Docker host can run all Chrome jobs.
+export RQ_QUEUES="${RQ_QUEUES:-browser,default}"
 NOVNC_PORT="${PORT:-6080}"
 VNC_PORT="${VNC_PORT:-5900}"
 

@@ -230,7 +230,7 @@ def api_account_prepare(account_id: int):
         }), 409
 
     # Prefer RQ → browser worker (same machine as noVNC / Chrome)
-    use_rq = bool(getattr(AppConfig, 'USE_RQ_WORKERS', False) and job_queue is not None)
+    use_rq = bool(getattr(AppConfig, 'USE_RQ_WORKERS', False) and (browser_queue or job_queue))
     if use_rq:
         task_id = runtime_store.create_task(
             user_id,
@@ -245,7 +245,8 @@ def api_account_prepare(account_id: int):
         try:
             from rq_tasks import run_prepare_task_v2
 
-            job_queue.enqueue(
+            target_queue = browser_queue or job_queue
+            target_queue.enqueue(
                 run_prepare_task_v2,
                 task_id=task_id,
                 user_id=user_id,

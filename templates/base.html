@@ -215,29 +215,83 @@ window.getCsrfToken = function() {
   const meta = document.querySelector('meta[name="csrf-token"]');
   return meta ? meta.getAttribute('content') : '';
 };
-window.apiFetch = function(url, options) {
+window.getAccessToken = function() {
+  return (localStorage.getItem('access_token') || localStorage.getItem('token') || '').trim();
+};
+window.clearAccessToken = function() {
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('token');
+};
+window.apiFetch = async function(url, options) {
   const opts = Object.assign({ credentials: 'include' }, options || {});
   const headers = Object.assign({}, opts.headers || {});
   const method = (opts.method || 'GET').toUpperCase();
+  const token = window.getAccessToken();
+  if (token && !headers.Authorization && !headers.authorization) {
+    headers.Authorization = 'Bearer ' + token;
+  }
   if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
     if (!headers['X-CSRFToken'] && !headers['X-CSRF-Token']) {
-      headers['X-CSRFToken'] = window.getCsrfToken();
+      let csrf = window.getCsrfToken();
+      if (!csrf) {
+        try {
+          const csrfRes = await window.__rawFetch('/api/csrf-token', { credentials: 'include' });
+          if (csrfRes.ok) csrf = (await csrfRes.json()).csrf_token || '';
+        } catch (e) {}
+      }
+      if (csrf) headers['X-CSRFToken'] = csrf;
     }
   }
   opts.headers = headers;
-  return fetch(url, opts);
+  let res = await window.__rawFetch(url, opts);
+  if (res.status === 401) {
+    let code = '';
+    try { code = (await res.clone().json()).code || ''; } catch (e) {}
+    if (code === 'INVALID_TOKEN' || code === 'TOKEN_EXPIRED' || headers.Authorization) {
+      window.clearAccessToken();
+      const retryHeaders = Object.assign({}, headers);
+      delete retryHeaders.Authorization;
+      delete retryHeaders.authorization;
+      res = await window.__rawFetch(url, Object.assign({}, opts, { headers: retryHeaders }));
+    }
+  }
+  return res;
 };
 (function() {
   const originalFetch = window.fetch.bind(window);
-  window.fetch = function(input, init) {
+  window.__rawFetch = originalFetch;
+  window.fetch = async function(input, init) {
     const opts = Object.assign({ credentials: 'include' }, init || {});
     const headers = new Headers(opts.headers || {});
     const method = (opts.method || 'GET').toUpperCase();
     if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS' && !headers.has('X-CSRFToken') && !headers.has('X-CSRF-Token')) {
-      headers.set('X-CSRFToken', window.getCsrfToken());
+      let csrf = window.getCsrfToken();
+      if (!csrf) {
+        try {
+          const csrfRes = await originalFetch('/api/csrf-token', { credentials: 'include' });
+          if (csrfRes.ok) csrf = (await csrfRes.json()).csrf_token || '';
+        } catch (e) {}
+      }
+      if (csrf) headers.set('X-CSRFToken', csrf);
+    }
+    // Drop empty/stale Bearer so httponly cookie JWT can authenticate the request.
+    const auth = headers.get('Authorization') || '';
+    if (/^Bearer\s*$/i.test(auth)) {
+      headers.delete('Authorization');
     }
     opts.headers = headers;
-    return originalFetch(input, opts);
+    let res = await originalFetch(input, opts);
+    if (res.status === 401 && headers.has('Authorization')) {
+      let code = '';
+      try { code = (await res.clone().json()).code || ''; } catch (e) {}
+      if (code === 'INVALID_TOKEN' || code === 'TOKEN_EXPIRED') {
+        window.clearAccessToken();
+        headers.delete('Authorization');
+        opts.headers = headers;
+        res = await originalFetch(input, opts);
+      }
+    }
+    return res;
   };
 })();
 </script>

@@ -153,8 +153,19 @@
 
 {% block scripts %}
 <script>
-function getToken(){ return localStorage.getItem('access_token') || ''; }
-function authHeaders(){ return {'Authorization':'Bearer '+getToken(),'Content-Type':'application/json'}; }
+function getToken(){ return (window.getAccessToken && window.getAccessToken()) || ''; }
+function authHeaders(){
+  var h = {'Content-Type':'application/json'};
+  var t = getToken();
+  // Prefer cookie JWT; only attach Bearer when localStorage actually has a token.
+  if (t) h.Authorization = 'Bearer ' + t;
+  return h;
+}
+function api(url, opts){
+  opts = opts || {};
+  opts.headers = Object.assign(authHeaders(), opts.headers || {});
+  return (window.apiFetch || fetch)(url, opts);
+}
 
 var safety = {default_hourly:5, default_daily:25, hard_max_hourly:20, hard_max_daily:80, warmup_days:7, warmup_hourly:3, warmup_daily:12, cooldown_minutes:60};
 
@@ -233,7 +244,8 @@ function accountRowHtml(a){
 }
 
 function refreshAccounts(){
-  fetch('/api/accounts',{headers:authHeaders()}).then(r=>r.json()).then(d=>{
+  api('/api/accounts').then(r=>r.json()).then(d=>{
+    if(d.error){ if(d.code==='INVALID_TOKEN'||d.code==='TOKEN_EXPIRED'){ window.clearAccessToken&&window.clearAccessToken(); } return; }
     if(d.prepare_status) renderPrepare(d.prepare_status);
     var body = document.getElementById('accounts-body');
     var rows = d.accounts || [];
@@ -242,7 +254,7 @@ function refreshAccounts(){
       return;
     }
     body.innerHTML = rows.map(accountRowHtml).join('');
-  });
+  }).catch(()=>{});
 }
 
 function saveAccount(){
@@ -255,18 +267,21 @@ function saveAccount(){
     daily_limit: parseInt(document.getElementById('acc-daily').value||'0',10)
   };
   if(!payload.login_email){ alert('Email required'); return; }
-  fetch('/api/accounts',{method:'POST',headers:authHeaders(),body:JSON.stringify(payload)})
-    .then(r=>r.json()).then(d=>{
-      if(d.error) alert(d.error);
-      else {
-        alert('Saved'+(d.hourly_limit?(' · limits '+d.hourly_limit+'/'+d.daily_limit):''));
-        refreshAccounts();
+  api('/api/accounts',{method:'POST',body:JSON.stringify(payload)})
+    .then(r=>r.json().then(d=>({ok:r.ok,status:r.status,d}))).then(res=>{
+      if(!res.ok){
+        alert(res.d.error || ('Save failed ('+res.status+')'));
+        return;
       }
-    });
+      var msg = 'Saved';
+      if(res.d.hourly_limit) msg += ' · limits '+res.d.hourly_limit+'/'+res.d.daily_limit+' (hard-capped)';
+      alert(msg);
+      refreshAccounts();
+    }).catch(function(){ alert('Network error'); });
 }
 
 function clearCooldown(id){
-  fetch('/api/accounts/'+id+'/clear-cooldown',{method:'POST',headers:authHeaders(),body:'{}'})
+  api('/api/accounts/'+id+'/clear-cooldown',{method:'POST',body:'{}'})
     .then(r=>r.json()).then(d=>{
       if(d.error) alert(d.error); else refreshAccounts();
     });
@@ -274,7 +289,7 @@ function clearCooldown(id){
 
 function prepareAccount(id){
   renderPrepare({status:'running',step:'starting',message:'Запуск Prepare...',progress:5});
-  fetch('/api/accounts/'+id+'/prepare',{method:'POST',headers:authHeaders(),body:'{}'})
+  api('/api/accounts/'+id+'/prepare',{method:'POST',body:'{}'})
     .then(r=>r.json().then(d=>({ok:r.ok,d}))).then(res=>{
       if(!res.ok){ renderPrepare({status:'failed',error:res.d.error||'Failed'}); return; }
       pollPrepare();
@@ -282,7 +297,7 @@ function prepareAccount(id){
 }
 
 function validateAccount(id){
-  fetch('/api/accounts/'+id+'/validate',{method:'POST',headers:authHeaders(),body:'{}'})
+  api('/api/accounts/'+id+'/validate',{method:'POST',body:'{}'})
     .then(r=>r.json()).then(d=>{
       alert(d.trusted ? 'Trusted ✓' : ('Not trusted: '+(d.error||d.status)));
       refreshAccounts();
@@ -290,7 +305,7 @@ function validateAccount(id){
 }
 
 function resumeManual(id){
-  fetch('/api/accounts/'+id+'/resume-manual',{method:'POST',headers:authHeaders(),body:'{}'})
+  api('/api/accounts/'+id+'/resume-manual',{method:'POST',body:'{}'})
     .then(r=>r.json()).then(d=>{
       renderPrepare({status:'waiting_manual',message:d.message||'Resume sent',progress:25});
       pollPrepare();
@@ -300,7 +315,7 @@ function resumeManual(id){
 var pollTimer=null;
 function pollPrepare(){
   if(pollTimer) clearTimeout(pollTimer);
-  fetch('/api/progress',{headers:authHeaders()}).then(r=>r.json()).then(d=>{
+  api('/api/progress').then(r=>r.json()).then(d=>{
     renderPrepare(d);
     if(d.status==='running'||d.status==='waiting_manual'){
       pollTimer=setTimeout(pollPrepare,2000);
@@ -310,7 +325,7 @@ function pollPrepare(){
   }).catch(()=>{});
 }
 
-fetch('/api/accounts/safety-defaults',{headers:authHeaders()})
+api('/api/accounts/safety-defaults')
   .then(r=>r.json()).then(applySafetyDefaults).catch(()=>applySafetyDefaults({}));
 
 var socket = window.io ? io() : null;

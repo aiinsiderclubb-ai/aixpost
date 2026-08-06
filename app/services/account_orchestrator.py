@@ -5,7 +5,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple
 
+from app.core.config import AppConfig
 from bot.account_health import AccountHealthMonitor
+from bot.account_safety import clamp_limits, effective_limits, safe_default_limits
 from bot.rate_limiter import AccountRateLimiter
 
 
@@ -83,11 +85,18 @@ class AccountOrchestrator:
             item["session"] = trust.get("session")
             item["posts_last_hour"] = self.store.count_account_posts(int(account["id"]), hours=1)
             item["posts_last_day"] = self.store.count_account_posts(int(account["id"]), hours=24)
-            allowed, reason = self.limiter.can_post(
-                int(account["id"]),
-                int(account.get("hourly_limit") or 0),
-                int(account.get("daily_limit") or 0),
+            limits = effective_limits(account)
+            item.update(
+                {
+                    "effective_hourly_limit": limits["hourly_limit"],
+                    "effective_daily_limit": limits["daily_limit"],
+                    "warmup": limits["warmup"],
+                    "warmup_days_left": limits["warmup_days_left"],
+                    "account_age_days": limits["account_age_days"],
+                    "limit_source": limits["source"],
+                }
             )
+            allowed, reason = self.limiter.can_post(int(account["id"]))
             item["can_post"] = allowed and trust["can_use"]
             item["rate_limit_reason"] = reason
             rows.append(item)
@@ -149,12 +158,12 @@ class AccountOrchestrator:
             last_validated_at=datetime.utcnow().isoformat(),
         )
         self.store.update_account_status(account_id, "needs_verify", reason)
-        # Soft cooldown so rotator skips this account for a bit
-        cooldown = datetime.now(timezone.utc) + timedelta(minutes=15)
+        cooldown_minutes = max(1, int(AppConfig.ACCOUNT_COOLDOWN_MINUTES))
+        cooldown = datetime.now(timezone.utc) + timedelta(minutes=cooldown_minutes)
         account = self.store.get_account(account_id) or {}
         self.store.update_account_health(
             account_id,
-            health_score=max(0, int(account.get("health_score") or 100) - 10),
+            health_score=max(0, int(account.get("health_score") or 100) - 15),
             consecutive_failures=int(account.get("consecutive_failures") or 0) + 1,
             cooldown_until=cooldown.isoformat(),
             last_error=reason,
@@ -184,6 +193,19 @@ class AccountOrchestrator:
             last_error=None,
         )
 
+    def clear_cooldown(self, user_id: int, account_id: int) -> Tuple[bool, str]:
+        account = self.store.get_account(account_id)
+        if not account or int(account.get("user_id") or 0) != int(user_id):
+            return False, "Account not found"
+        self.store.update_account_health(
+            account_id,
+            health_score=int(account.get("health_score") or 100),
+            consecutive_failures=0,
+            cooldown_until=None,
+            last_error=None,
+        )
+        return True, "Cooldown cleared"
+
     def next_account_after_failure(
         self,
         user_id: int,
@@ -199,3 +221,14 @@ class AccountOrchestrator:
             require_trusted=True,
             exclude_ids={int(failed_account_id)},
         )
+
+    @staticmethod
+    def normalize_new_account_limits(hourly_limit: int, daily_limit: int, *, is_new: bool) -> Tuple[int, int]:
+        hourly, daily = clamp_limits(int(hourly_limit or 0), int(daily_limit or 0))
+        if is_new and hourly <= 0 and daily <= 0:
+            return safe_default_limits()
+        if hourly <= 0:
+            hourly = AppConfig.DEFAULT_HOURLY_POST_LIMIT
+        if daily <= 0:
+            daily = AppConfig.DEFAULT_DAILY_POST_LIMIT
+        return clamp_limits(hourly, daily)

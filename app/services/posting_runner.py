@@ -47,14 +47,23 @@ def execute_posting_task(
     poster.password = password
     AppConfig.overlay_bot_secrets_from_env(poster)
 
+    warmup_note = None
     if account_id:
         account = runtime_store.get_account(account_id)
         if account:
+            from bot.account_safety import effective_limits
+
             poster.account_id = account_id
-            poster.hourly_limit = int(account.get("hourly_limit") or 0)
-            poster.daily_limit = int(account.get("daily_limit") or 0)
+            limits = effective_limits(account)
+            poster.hourly_limit = int(limits["hourly_limit"])
+            poster.daily_limit = int(limits["daily_limit"])
             if account.get("profile_dir"):
                 poster.profile_dir = account["profile_dir"]
+            if limits.get("warmup"):
+                warmup_note = (
+                    f"Warm-up active: {limits['hourly_limit']}/h · {limits['daily_limit']}/d "
+                    f"({limits.get('warmup_days_left', 0)} days left)"
+                )
 
     poster.rate_limiter = AccountRateLimiter(runtime_store)
     poster.health_monitor = AccountHealthMonitor(runtime_store)
@@ -103,7 +112,7 @@ def execute_posting_task(
                 checkpoint_detected=status == "checkpoint",
                 last_validated_at=datetime.utcnow().isoformat(),
             )
-        # Auto-pause account trust on checkpoint / 2FA / captcha; suggest next account
+        # Auto-pause account trust on checkpoint / 2FA / captcha; hard-stop task queue
         if account_id and status in ("checkpoint", "need_2fa", "captcha", "needs_verify", "waiting_manual"):
             try:
                 from app.services.account_orchestrator import AccountOrchestrator
@@ -119,20 +128,40 @@ def execute_posting_task(
                     "suggested_account_id": int(next_acc["id"]) if next_acc else None,
                     "reason": reason or status,
                     "verification": status,
+                    "queue_stopped": bool(AppConfig.AUTO_STOP_ON_VERIFICATION),
                 }
                 runtime_store.update_task(
                     task_id,
                     status="waiting_manual",
                     heartbeat_at=datetime.utcnow().isoformat(),
                     result_json=meta,
+                    error_message=reason or status,
                 )
+                if AppConfig.AUTO_STOP_ON_VERIFICATION:
+                    try:
+                        runtime_store.request_stop(task_id, user_id)
+                    except Exception:
+                        pass
+                    try:
+                        poster.stop_posting_method()
+                    except Exception:
+                        poster.stop_posting_flag = True
+                        poster.stop_posting = True
+                    runtime_store.append_task_event(
+                        task_id,
+                        f"Auto-stopped posting queue due to {status}: {reason or ''}",
+                        level="warning",
+                        event_type="auto_stop",
+                        metadata=meta,
+                    )
                 _emit("account_rotation", meta)
                 _emit(
                     "verification_required",
                     {
                         "status": status,
                         "reason": reason or status,
-                        "message": "Complete CAPTCHA/2FA in visible Chrome, then Resume.",
+                        "message": "Posting stopped. Complete CAPTCHA/2FA, then Prepare/Resume before starting a new run.",
+                        "queue_stopped": bool(AppConfig.AUTO_STOP_ON_VERIFICATION),
                     },
                 )
             except Exception:
@@ -183,6 +212,8 @@ def execute_posting_task(
     if record_session:
         record_session(user_id, account_id, "starting", "task_started", profile_dir=poster.profile_dir)
     _push_event("Posting task accepted", event_type="system")
+    if warmup_note:
+        _push_event(warmup_note, level="warning", event_type="warmup")
     runtime_store.update_task(task_id, status="running", started_at=datetime.utcnow().isoformat(), resumable=1)
 
     try:

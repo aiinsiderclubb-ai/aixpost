@@ -7,6 +7,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class AppConfig:
+    PROJECT_ROOT = PROJECT_ROOT
     DEBUG = os.environ.get("FLASK_DEBUG", "true").lower() in ("1", "true", "yes")
     USE_RQ_WORKERS = os.environ.get("USE_RQ_WORKERS", "false").lower() in ("1", "true", "yes")
     REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
@@ -22,10 +23,28 @@ class AppConfig:
     DATABASE_URL = (os.environ.get("DATABASE_URL") or "").strip()
     CONFIG_INI_PATH = os.environ.get("CONFIG_INI_PATH", str(PROJECT_ROOT / "config.ini"))
 
-    DEFAULT_HOURLY_POST_LIMIT = int(os.environ.get("DEFAULT_HOURLY_POST_LIMIT", "15"))
-    DEFAULT_DAILY_POST_LIMIT = int(os.environ.get("DEFAULT_DAILY_POST_LIMIT", "80"))
-    ACCOUNT_COOLDOWN_MINUTES = int(os.environ.get("ACCOUNT_COOLDOWN_MINUTES", "30"))
-    MAX_CONSECUTIVE_FAILURES = int(os.environ.get("MAX_CONSECUTIVE_FAILURES", "3"))
+    DEFAULT_HOURLY_POST_LIMIT = int(os.environ.get("DEFAULT_HOURLY_POST_LIMIT", "5"))
+    DEFAULT_DAILY_POST_LIMIT = int(os.environ.get("DEFAULT_DAILY_POST_LIMIT", "25"))
+    # Absolute caps — UI/API cannot exceed these (anti-ban guardrail).
+    HARD_MAX_HOURLY_POST_LIMIT = int(os.environ.get("HARD_MAX_HOURLY_POST_LIMIT", "20"))
+    HARD_MAX_DAILY_POST_LIMIT = int(os.environ.get("HARD_MAX_DAILY_POST_LIMIT", "80"))
+    ACCOUNT_COOLDOWN_MINUTES = int(os.environ.get("ACCOUNT_COOLDOWN_MINUTES", "60"))
+    MAX_CONSECUTIVE_FAILURES = int(os.environ.get("MAX_CONSECUTIVE_FAILURES", "2"))
+    # Warm-up: first N days after account creation use stricter caps.
+    ACCOUNT_WARMUP_DAYS = int(os.environ.get("ACCOUNT_WARMUP_DAYS", "7"))
+    WARMUP_HOURLY_POST_LIMIT = int(os.environ.get("WARMUP_HOURLY_POST_LIMIT", "3"))
+    WARMUP_DAILY_POST_LIMIT = int(os.environ.get("WARMUP_DAILY_POST_LIMIT", "12"))
+    # On checkpoint/2FA: hard-stop the posting task (do not keep queue going).
+    AUTO_STOP_ON_VERIFICATION = os.environ.get("AUTO_STOP_ON_VERIFICATION", "true").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    TELEGRAM_BOT_POLLING = os.environ.get("TELEGRAM_BOT_POLLING", "true").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
 
     @classmethod
     def sqlalchemy_database_uri(cls) -> str:

@@ -1970,6 +1970,15 @@ def bootstrap_background_services():
     print("✅ Job scheduler initialized")
     print("✅ Database tables created successfully!")
     try:
+        from bot.telegram_bot import start_telegram_bot_polling
+
+        if start_telegram_bot_polling():
+            print("✅ Telegram inbound bot polling started (/schedule, /jobs, …)")
+        else:
+            print("ℹ️  Telegram inbound bot polling skipped (token/flag)")
+    except Exception as tg_bot_err:
+        print(f"⚠️  Telegram inbound bot skipped: {tg_bot_err}")
+    try:
         from app.blueprints import rebind_all
         rebind_all()
     except Exception:
@@ -1984,6 +1993,11 @@ def shutdown_background_services():
     try:
         from bot.analytics_scheduler import analytics_scheduler
         analytics_scheduler.stop()
+    except Exception:
+        pass
+    try:
+        from bot.telegram_bot import stop_telegram_bot_polling
+        stop_telegram_bot_polling()
     except Exception:
         pass
     _background_started = False

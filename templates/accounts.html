@@ -5,6 +5,7 @@
 {% block content %}
 <p class="small mb-3" style="color:var(--text-muted)">
   Сначала подготовьте аккаунт (Prepare) — пройдите CAPTCHA/2FA в Chrome. Зелёный Trusted нужен для Fetch и Posting.
+  Новые аккаунты стартуют с безопасными лимитами; первые дни — warm-up.
 </p>
 
 <div class="card mb-4">
@@ -21,6 +22,10 @@
       <a href="{{ url_for('poster_page') }}" class="badge bg-primary text-decoration-none">5. Post</a>
     </div>
   </div>
+</div>
+
+<div class="alert alert-secondary py-2 small mb-4" id="safety-banner">
+  Safe defaults: <span id="safety-defaults">…</span>
 </div>
 
 <div class="row g-4 mb-4">
@@ -43,12 +48,15 @@
         <div class="row g-2 mb-2">
           <div class="col-6">
             <label class="form-label small">Hourly limit</label>
-            <input class="form-control" id="acc-hourly" type="number" value="15">
+            <input class="form-control" id="acc-hourly" type="number" value="5" min="1">
           </div>
           <div class="col-6">
             <label class="form-label small">Daily limit</label>
-            <input class="form-control" id="acc-daily" type="number" value="80">
+            <input class="form-control" id="acc-daily" type="number" value="25" min="1">
           </div>
+        </div>
+        <div class="form-text small mb-2" id="limit-hint" style="color:var(--text-muted)">
+          Hard caps apply server-side. Warm-up overrides for new accounts.
         </div>
         <div class="form-check mb-3">
           <input class="form-check-input" type="checkbox" id="acc-primary">
@@ -107,17 +115,30 @@
             {% elif t == 'needs_verify' %}<span class="badge bg-warning text-dark">Needs verify</span>
             {% elif t == 'blocked' %}<span class="badge bg-danger">Blocked</span>
             {% else %}<span class="badge bg-secondary">Unknown</span>{% endif %}
+            {% if a.warmup %}<span class="badge bg-info text-dark">Warm-up {{ a.warmup_days_left }}d</span>{% endif %}
             <div class="small mt-1" style="color:var(--text-muted)">{{ a.trust_reason or '' }}</div>
           </td>
           <td>
             <span class="small">{{ a.health_score if a.health_score is not none else 100 }}</span>
-            {% if a.cooldown_until %}<div class="small text-danger">cooldown</div>{% endif %}
+            {% if a.cooldown_until %}
+            <div class="small text-danger">cooldown until {{ a.cooldown_until }}</div>
+            {% endif %}
+            {% if a.rate_limit_reason %}
+            <div class="small" style="color:var(--text-muted)">{{ a.rate_limit_reason }}</div>
+            {% endif %}
           </td>
-          <td class="small">{{ a.posts_last_hour or 0 }}/h · {{ a.posts_last_day or 0 }}/d</td>
+          <td class="small">
+            {{ a.posts_last_hour or 0 }}/{{ a.effective_hourly_limit or a.hourly_limit or '—' }}/h
+            · {{ a.posts_last_day or 0 }}/{{ a.effective_daily_limit or a.daily_limit or '—' }}/d
+            <div style="color:var(--text-muted)">cfg {{ a.hourly_limit or 0 }}/{{ a.daily_limit or 0 }}</div>
+          </td>
           <td class="d-flex flex-wrap gap-1">
             <button class="btn btn-sm btn-primary" onclick="prepareAccount({{ a.id }})">Prepare</button>
             <button class="btn btn-sm btn-outline-secondary" onclick="validateAccount({{ a.id }})">Validate</button>
             <button class="btn btn-sm btn-warning" onclick="resumeManual({{ a.id }})">Я прошёл CAPTCHA</button>
+            {% if a.cooldown_until %}
+            <button class="btn btn-sm btn-outline-danger" onclick="clearCooldown({{ a.id }})">Clear cooldown</button>
+            {% endif %}
           </td>
         </tr>
         {% else %}
@@ -135,11 +156,29 @@
 function getToken(){ return localStorage.getItem('access_token') || ''; }
 function authHeaders(){ return {'Authorization':'Bearer '+getToken(),'Content-Type':'application/json'}; }
 
+var safety = {default_hourly:5, default_daily:25, hard_max_hourly:20, hard_max_daily:80, warmup_days:7, warmup_hourly:3, warmup_daily:12, cooldown_minutes:60};
+
 function trustBadge(t){
   if(t==='trusted') return '<span class="badge bg-success">Trusted</span>';
   if(t==='needs_verify') return '<span class="badge bg-warning text-dark">Needs verify</span>';
   if(t==='blocked') return '<span class="badge bg-danger">Blocked</span>';
   return '<span class="badge bg-secondary">Unknown</span>';
+}
+
+function applySafetyDefaults(d){
+  safety = Object.assign(safety, d||{});
+  document.getElementById('acc-hourly').value = safety.default_hourly;
+  document.getElementById('acc-daily').value = safety.default_daily;
+  document.getElementById('acc-hourly').max = safety.hard_max_hourly;
+  document.getElementById('acc-daily').max = safety.hard_max_daily;
+  document.getElementById('safety-defaults').textContent =
+    safety.default_hourly+'/h · '+safety.default_daily+'/d · hard max '+
+    safety.hard_max_hourly+'/'+safety.hard_max_daily+' · warm-up '+
+    safety.warmup_days+'d @ '+safety.warmup_hourly+'/'+safety.warmup_daily+
+    ' · cooldown '+safety.cooldown_minutes+'m';
+  document.getElementById('limit-hint').textContent =
+    'Cannot exceed '+safety.hard_max_hourly+'/h and '+safety.hard_max_daily+'/d. First '+
+    safety.warmup_days+' days capped at '+safety.warmup_hourly+'/h · '+safety.warmup_daily+'/d.';
 }
 
 function renderPrepare(d){
@@ -162,6 +201,37 @@ function renderPrepare(d){
   else err.classList.add('d-none');
 }
 
+function accountRowHtml(a){
+  var cool = a.cooldown_until
+    ? '<div class="small text-danger">cooldown until '+a.cooldown_until+'</div>'
+    : '';
+  var rate = a.rate_limit_reason
+    ? '<div class="small" style="color:var(--text-muted)">'+a.rate_limit_reason+'</div>'
+    : '';
+  var warm = a.warmup
+    ? ' <span class="badge bg-info text-dark">Warm-up '+(a.warmup_days_left||0)+'d</span>'
+    : '';
+  var clearBtn = a.cooldown_until
+    ? '<button class="btn btn-sm btn-outline-danger" onclick="clearCooldown('+a.id+')">Clear cooldown</button>'
+    : '';
+  return `
+      <tr data-id="${a.id}">
+        <td><div class="fw-semibold small">${a.label||a.login_email}</div>
+            <div class="small" style="color:var(--text-muted)">${a.login_email}${a.is_primary?' · primary':''}</div></td>
+        <td>${trustBadge(a.trust)}${a.credentials_ok===false?' <span class="badge bg-danger">Password</span>':''}${warm}<div class="small mt-1" style="color:var(--text-muted)">${a.trust_reason||''}</div></td>
+        <td><span class="small">${a.health_score ?? 100}</span>${cool}${rate}</td>
+        <td class="small">${a.posts_last_hour||0}/${a.effective_hourly_limit||a.hourly_limit||'—'}/h
+            · ${a.posts_last_day||0}/${a.effective_daily_limit||a.daily_limit||'—'}/d
+            <div style="color:var(--text-muted)">cfg ${a.hourly_limit||0}/${a.daily_limit||0}</div></td>
+        <td class="d-flex flex-wrap gap-1">
+          <button class="btn btn-sm btn-primary" onclick="prepareAccount(${a.id})">Prepare</button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="validateAccount(${a.id})">Validate</button>
+          <button class="btn btn-sm btn-warning" onclick="resumeManual(${a.id})">Я прошёл CAPTCHA</button>
+          ${clearBtn}
+        </td>
+      </tr>`;
+}
+
 function refreshAccounts(){
   fetch('/api/accounts',{headers:authHeaders()}).then(r=>r.json()).then(d=>{
     if(d.prepare_status) renderPrepare(d.prepare_status);
@@ -171,19 +241,7 @@ function refreshAccounts(){
       body.innerHTML = '<tr><td colspan="5" class="text-center py-4" style="color:var(--text-muted)">No accounts yet</td></tr>';
       return;
     }
-    body.innerHTML = rows.map(a => `
-      <tr data-id="${a.id}">
-        <td><div class="fw-semibold small">${a.label||a.login_email}</div>
-            <div class="small" style="color:var(--text-muted)">${a.login_email}${a.is_primary?' · primary':''}</div></td>
-        <td>${trustBadge(a.trust)}${a.credentials_ok===false?' <span class="badge bg-danger">Password</span>':''}<div class="small mt-1" style="color:var(--text-muted)">${a.trust_reason||''}</div></td>
-        <td><span class="small">${a.health_score ?? 100}</span>${a.cooldown_until?'<div class="small text-danger">cooldown</div>':''}</td>
-        <td class="small">${a.posts_last_hour||0}/h · ${a.posts_last_day||0}/d</td>
-        <td class="d-flex flex-wrap gap-1">
-          <button class="btn btn-sm btn-primary" onclick="prepareAccount(${a.id})">Prepare</button>
-          <button class="btn btn-sm btn-outline-secondary" onclick="validateAccount(${a.id})">Validate</button>
-          <button class="btn btn-sm btn-warning" onclick="resumeManual(${a.id})">Я прошёл CAPTCHA</button>
-        </td>
-      </tr>`).join('');
+    body.innerHTML = rows.map(accountRowHtml).join('');
   });
 }
 
@@ -199,7 +257,18 @@ function saveAccount(){
   if(!payload.login_email){ alert('Email required'); return; }
   fetch('/api/accounts',{method:'POST',headers:authHeaders(),body:JSON.stringify(payload)})
     .then(r=>r.json()).then(d=>{
-      if(d.error) alert(d.error); else { alert('Saved'); refreshAccounts(); }
+      if(d.error) alert(d.error);
+      else {
+        alert('Saved'+(d.hourly_limit?(' · limits '+d.hourly_limit+'/'+d.daily_limit):''));
+        refreshAccounts();
+      }
+    });
+}
+
+function clearCooldown(id){
+  fetch('/api/accounts/'+id+'/clear-cooldown',{method:'POST',headers:authHeaders(),body:'{}'})
+    .then(r=>r.json()).then(d=>{
+      if(d.error) alert(d.error); else refreshAccounts();
     });
 }
 
@@ -240,6 +309,9 @@ function pollPrepare(){
     }
   }).catch(()=>{});
 }
+
+fetch('/api/accounts/safety-defaults',{headers:authHeaders()})
+  .then(r=>r.json()).then(applySafetyDefaults).catch(()=>applySafetyDefaults({}));
 
 var socket = window.io ? io() : null;
 if(socket){

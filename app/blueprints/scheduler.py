@@ -138,11 +138,14 @@ def create_scheduled_job():
         global job_scheduler
         job_data = {
             'name': job.name,
+            'cron_expression': job.cron_expression,
             'message': data['campaign_data'].get('message', ''),
             'target_groups': data['campaign_data'].get('target_groups', []),
             'max_groups': data['campaign_data'].get('max_groups', 10),
             'min_delay': data['campaign_data'].get('min_delay', 10),
-            'max_delay': data['campaign_data'].get('max_delay', 60)
+            'max_delay': data['campaign_data'].get('max_delay', 60),
+            'use_templates': bool(data['campaign_data'].get('use_templates')),
+            'template_mode': data['campaign_data'].get('template_mode') or 'random',
         }
         
         success = job_scheduler.schedule_job(job.id, user_id, job_data)
@@ -227,10 +230,15 @@ def update_scheduled_job(job_id):
         
         # Update job in scheduler
         global job_scheduler
+        campaign = json.loads(job.campaign_data) if job.campaign_data else {}
         job_data = {
             'name': job.name,
             'cron_expression': job.cron_expression,
-            'campaign_data': json.loads(job.campaign_data)
+            'message': campaign.get('message', ''),
+            'target_groups': campaign.get('target_groups', []),
+            'max_groups': campaign.get('max_groups', 10),
+            'use_templates': bool(campaign.get('use_templates')),
+            'template_mode': campaign.get('template_mode') or 'random',
         }
         
         job_scheduler.schedule_job(job.id, user_id, job_data)

@@ -109,6 +109,14 @@ def api_accounts():
         encrypted_password = existing['encrypted_password']
     elif encrypted_password is None:
         encrypted_password = ''
+    from app.services.account_orchestrator import AccountOrchestrator
+    from app.core.config import AppConfig
+
+    hourly, daily = AccountOrchestrator.normalize_new_account_limits(
+        int(data.get('hourly_limit', 0) or 0),
+        int(data.get('daily_limit', 0) or 0),
+        is_new=existing is None,
+    )
     account_id = runtime_store.upsert_account(
         user_id=user_id,
         login_email=login_email,
@@ -117,8 +125,8 @@ def api_accounts():
         is_primary=bool(data.get('is_primary')),
         is_active=bool(data.get('is_active', True)),
         priority=int(data.get('priority', 0) or 0),
-        hourly_limit=int(data.get('hourly_limit', 0) or 0),
-        daily_limit=int(data.get('daily_limit', 0) or 0),
+        hourly_limit=hourly,
+        daily_limit=daily,
         notes=data.get('notes'),
         profile_dir=data.get('profile_dir') or (existing or {}).get('profile_dir') or profile_dir,
     )
@@ -127,7 +135,15 @@ def api_accounts():
         user.facebook_username = login_email
         user.facebook_password = encrypted_password
         db.session.commit()
-    return jsonify({'message': 'Account saved', 'account_id': account_id}), 201
+    return jsonify({
+        'message': 'Account saved',
+        'account_id': account_id,
+        'hourly_limit': hourly,
+        'daily_limit': daily,
+        'hard_max_hourly': AppConfig.HARD_MAX_HOURLY_POST_LIMIT,
+        'hard_max_daily': AppConfig.HARD_MAX_DAILY_POST_LIMIT,
+        'warmup_days': AppConfig.ACCOUNT_WARMUP_DAYS,
+    }), 201
 
 @bp.route('/api/account/status', methods=['GET'])
 @jwt_required()
@@ -359,4 +375,38 @@ def api_accounts_pick():
     if not account:
         return jsonify({'error': reason or 'No account available', 'code': 'NO_ACCOUNT'}), 409
     return jsonify({'account': account}), 200
+
+
+@bp.route('/api/accounts/<int:account_id>/clear-cooldown', methods=['POST'])
+@jwt_required()
+def api_account_clear_cooldown(account_id: int):
+    """Manually clear account cooldown after verification / false positive."""
+    user_id = int(get_jwt_identity())
+    from app.services.account_orchestrator import AccountOrchestrator
+    ok, message = AccountOrchestrator(runtime_store).clear_cooldown(user_id, account_id)
+    if not ok:
+        return jsonify({'error': message}), 404
+    return jsonify({'message': message}), 200
+
+
+@bp.route('/api/accounts/safety-defaults', methods=['GET'])
+@jwt_required()
+def api_account_safety_defaults():
+    """Expose safe defaults / hard caps for the Accounts UI."""
+    from app.core.config import AppConfig
+    from bot.account_safety import safe_default_limits
+
+    hourly, daily = safe_default_limits()
+    return jsonify({
+        'default_hourly': hourly,
+        'default_daily': daily,
+        'hard_max_hourly': AppConfig.HARD_MAX_HOURLY_POST_LIMIT,
+        'hard_max_daily': AppConfig.HARD_MAX_DAILY_POST_LIMIT,
+        'cooldown_minutes': AppConfig.ACCOUNT_COOLDOWN_MINUTES,
+        'warmup_days': AppConfig.ACCOUNT_WARMUP_DAYS,
+        'warmup_hourly': AppConfig.WARMUP_HOURLY_POST_LIMIT,
+        'warmup_daily': AppConfig.WARMUP_DAILY_POST_LIMIT,
+        'auto_stop_on_verification': AppConfig.AUTO_STOP_ON_VERIFICATION,
+        'max_consecutive_failures': AppConfig.MAX_CONSECUTIVE_FAILURES,
+    }), 200
 

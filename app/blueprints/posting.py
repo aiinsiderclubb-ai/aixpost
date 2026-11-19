@@ -58,7 +58,6 @@ def bind_runtime() -> None:
 @bp.route('/api/post_to_groups', methods=['POST'])
 @jwt_required()
 def api_post_to_groups():
-    global poster_instance
     try:
         data = request.get_json() or {}
         message = data.get('message', '').strip()

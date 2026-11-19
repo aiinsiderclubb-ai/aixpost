@@ -1709,7 +1709,6 @@ def _start_local_posting_thread(user_id: int, username: str, password: str, mess
                                 skip_success_urls: Optional[set[str]] = None,
                                 resumed_from_task_id: Optional[int] = None) -> dict:
     """Unified persistent posting runner backed by local threads or RQ workers."""
-    global poster_instance
 
     if not _load_facebook_automation():
         raise RuntimeError("AI posting is not available in this environment")

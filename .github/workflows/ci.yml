@@ -18,26 +18,38 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Verify FERNET_KEY present
-        run: |
-          if [ -z "${{ secrets.FERNET_KEY }}" ]; then
-            echo "FERNET_KEY secret is required" && exit 1
-          fi
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest flake8
 
+      # Tests only need a valid Fernet key, not the production one. Use the
+      # FERNET_KEY secret when the repository has it, otherwise a key made for
+      # this run alone — so CI also passes on forks and before secrets exist.
+      - name: Provide FERNET_KEY
+        env:
+          SECRET_FERNET_KEY: ${{ secrets.FERNET_KEY }}
+        run: |
+          key="$SECRET_FERNET_KEY"
+          if [ -z "$key" ]; then
+            key=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+            echo "No FERNET_KEY secret set: using a throwaway key for this run."
+          fi
+          echo "::add-mask::$key"
+          echo "FERNET_KEY=$key" >> "$GITHUB_ENV"
+
+      # Blueprints receive run_test_v2's shared objects at runtime through
+      # bind_runtime() -> globals(), so those names are invisible to static
+      # analysis. F821 is ignored there only; every other check still applies.
       - name: Lint (active packages)
         run: |
           flake8 app bot platform_runtime.py run_test_v2.py rq_tasks.py \
-            --count --select=E9,F63,F7,F82 --show-source --statistics
+            --count --select=E9,F63,F7,F82 --show-source --statistics \
+            --per-file-ignores="app/blueprints/*.py:F821"
 
       - name: Test
         env:
-          FERNET_KEY: ${{ secrets.FERNET_KEY }}
           FLASK_SECRET_KEY: ci-secret
           JWT_SECRET_KEY: ci-jwt-secret
           FLASK_DEBUG: "true"

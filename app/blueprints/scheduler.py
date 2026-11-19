@@ -135,7 +135,6 @@ def create_scheduled_job():
         db.session.commit()
         
         # Add job to scheduler
-        global job_scheduler
         job_data = {
             'name': job.name,
             'cron_expression': job.cron_expression,
@@ -229,7 +228,6 @@ def update_scheduled_job(job_id):
         db.session.commit()
         
         # Update job in scheduler
-        global job_scheduler
         campaign = json.loads(job.campaign_data) if job.campaign_data else {}
         job_data = {
             'name': job.name,
@@ -279,7 +277,6 @@ def delete_scheduled_job(job_id):
             }), 404
         
         # Remove from scheduler
-        global job_scheduler
         job_scheduler.delete_job(job.id)
         
         # Delete from database
@@ -321,7 +318,6 @@ def pause_scheduled_job(job_id):
             }), 404
         
         # Pause in scheduler
-        global job_scheduler
         success = job_scheduler.pause_job(job.id)
         
         if success:
@@ -370,7 +366,6 @@ def resume_scheduled_job(job_id):
             }), 404
         
         # Resume in scheduler
-        global job_scheduler
         success = job_scheduler.resume_job(job.id)
         
         if success:

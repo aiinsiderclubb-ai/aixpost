@@ -485,7 +485,6 @@ def api_account_resume_manual(account_id: int):
         signaled = True
 
     # Also nudge active fetcher/poster if they share the challenge.
-    global fetcher_instance, poster_instance
     if fetcher_instance and getattr(fetcher_instance, 'manual_verification_needed', False):
         setattr(fetcher_instance, 'manual_resume_requested', True)
         signaled = True

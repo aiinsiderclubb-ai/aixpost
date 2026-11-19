@@ -142,7 +142,6 @@ def export_groups(format):
 @jwt_required()
 def start_fetch():
     """Start fetching Facebook groups using Selenium fetcher"""
-    global fetcher_instance
     try:
         data = request.get_json() or {}
         user_id = int(get_jwt_identity())

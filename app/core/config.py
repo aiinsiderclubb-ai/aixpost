@@ -11,17 +11,16 @@ class AppConfig:
     DEBUG = os.environ.get("FLASK_DEBUG", "true").lower() in ("1", "true", "yes")
     USE_RQ_WORKERS = os.environ.get("USE_RQ_WORKERS", "false").lower() in ("1", "true", "yes")
     REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
-    RUNTIME_DB_PATH = os.environ.get(
-        "RUNTIME_DB_PATH",
-        str(PROJECT_ROOT / "platform_runtime.db"),
-    )
+    # Paths use `or`, not a get() default: `.env.example` ships these keys empty,
+    # and an empty SQLite path opens a fresh temporary database per connection.
+    RUNTIME_DB_PATH = (os.environ.get("RUNTIME_DB_PATH") or "").strip() or str(PROJECT_ROOT / "platform_runtime.db")
     # When set (postgres://...), RuntimeStore uses Postgres for multi-host web/worker.
     # Falls back to DATABASE_URL if RUNTIME_USE_APP_DB=true; otherwise SQLite file.
     RUNTIME_DATABASE_URL = (os.environ.get("RUNTIME_DATABASE_URL") or "").strip()
     RUNTIME_USE_APP_DB = os.environ.get("RUNTIME_USE_APP_DB", "true").lower() in ("1", "true", "yes")
-    APP_SQLITE_PATH = os.environ.get("APP_SQLITE_PATH", str(PROJECT_ROOT / "test_app.db"))
+    APP_SQLITE_PATH = (os.environ.get("APP_SQLITE_PATH") or "").strip() or str(PROJECT_ROOT / "test_app.db")
     DATABASE_URL = (os.environ.get("DATABASE_URL") or "").strip()
-    CONFIG_INI_PATH = os.environ.get("CONFIG_INI_PATH", str(PROJECT_ROOT / "config.ini"))
+    CONFIG_INI_PATH = (os.environ.get("CONFIG_INI_PATH") or "").strip() or str(PROJECT_ROOT / "config.ini")
 
     DEFAULT_HOURLY_POST_LIMIT = int(os.environ.get("DEFAULT_HOURLY_POST_LIMIT", "5"))
     DEFAULT_DAILY_POST_LIMIT = int(os.environ.get("DEFAULT_DAILY_POST_LIMIT", "25"))

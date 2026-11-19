@@ -8,6 +8,14 @@ With automatic dashboard redirect, AI posting integration, and real-time updates
 
 import os
 import sys
+
+# `python run_test_v2.py` loads this file as `__main__`, while the blueprints
+# lazily `import run_test_v2`. Without this alias that import executes the file a
+# second time, creating a second Flask app and SQLAlchemy instance, and every
+# blueprint route then fails ("app is not registered with this 'SQLAlchemy'
+# instance"). Gunicorn imports the module by name, so it never hit this.
+if __name__ == "__main__":
+    sys.modules.setdefault("run_test_v2", sys.modules[__name__])
 import logging
 import json
 import io
